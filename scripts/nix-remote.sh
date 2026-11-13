@@ -3,7 +3,8 @@
 # 5.9 bis): the Mac has no Nix. The working tree (tracked and new files, not
 # the ignored ones) is copied to the builder, and Nix runs there in the
 # official nixos/nix container; the Docker volume `charpentier-nix` keeps /nix
-# between runs. Nothing is installed on the builder itself.
+# between runs. Nothing is installed on the builder itself, and the container
+# is bounded (16 Go of memory, 3 processors).
 #
 #   CHARPENTIER_BUILDER=prodesk2021.local scripts/nix-remote.sh build .#charpentier
 #
@@ -23,7 +24,8 @@ git ls-files -co --exclude-standard -z |
   ssh "$host" 'rm -rf ~/charpentier-build/src && mkdir -p ~/charpentier-build/src && tar -xf - -C ~/charpentier-build/src'
 
 args=$(printf ' %q' "$@")
-ssh "$host" "docker run --rm -v charpentier-nix:/nix -v \$HOME/charpentier-build:/build -w /build/src \
+# Bounded: the builder is someone's computer, it must stay usable.
+ssh "$host" "docker run --rm --memory=16g --memory-swap=16g --cpus=3 -v charpentier-nix:/nix -v \$HOME/charpentier-build:/build -w /build/src \
   nixos/nix:latest sh -c $(printf '%q' "git config --global --add safe.directory '*' 2>/dev/null; nix --extra-experimental-features 'nix-command flakes' --option sandbox false$args && { [ ! -e result ] || { rm -rf /build/result && cp -rL result /build/result; }; }")"
 
 # The versions Nix chose stay pinned in the repository.
