@@ -40,7 +40,7 @@ Le X250 ne reçoit que des versions numérotées (D-31, phase 5.11 du plan de l'
 - Secrets de ce dépôt :
   - `CHARPENTIER_OS_BOT_TOKEN` : un jeton fin limité à `chatelp/charpentier-os`, droits Contents et Pull requests en écriture. `GITHUB_TOKEN` ne suffit pas : ce qu'il pousse ou fusionne ne déclenche ni la CI de la pull request ni la publication.
   - `CHARPENTIER_CACHE_TOKEN` : le jeton de la CI sur le serveur (`docker compose exec server node main.js create-ci-token github-actions`).
-  - `NIX_SIGNING_KEY` : la clé secrète de signature (`nix key generate-secret --key-name charpentier-x250-1`) ; sa clé publique (`nix key convert-secret-to-public`) ira dans `hosts/x250` à la phase 5.12.
+  - `NIX_SIGNING_KEY` : la clé secrète de signature `charpentier-x250-1`, faite sur le Yoga L13 sans être affichée, posée là et gardée en secours dans le gestionnaire de mots de passe de Pierre. Sa clé publique est `hosts/x250/cache-key.pub`, que le X250 lira à la phase 5.12.
 - Réglages : « Allow auto-merge » ; une règle sur main qui demande une pull request et le check « systèmes, clé et essai en VM », sans approbation.
 - Dans l'app : le jeton `CHARPENTIER_OS_DISPATCH` qui envoie le `repository_dispatch`.
 
