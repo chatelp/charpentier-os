@@ -41,6 +41,12 @@ line() { # line [style] text…
   row=$((row + 1))
 }
 gap() { row=$((row + 1)); }
+# repeat <character> <count>: tr would cut a character of several bytes.
+repeat() {
+  local s
+  printf -v s '%*s' "$2" ''
+  printf '%s' "${s// /$1}"
+}
 head_lines() { # the head and the steps, the current one in ink
   local current=$1 i s out=''
   line "$FAINT" 'charpentier · x250 · installation'
@@ -253,8 +259,8 @@ ask_password() {
     gap
     local a b
     if [ "$shown" = 1 ]; then a=$first b=$second; else
-      a=$(printf '%*s' "${#first}" '' | tr ' ' '•')
-      b=$(printf '%*s' "${#second}" '' | tr ' ' '•')
+      a=$(repeat '•' "${#first}")
+      b=$(repeat '•' "${#second}")
     fi
     line "$INK2" "mot de passe      $INK$a$([ "$field" = 1 ] && printf '▏')"
     line "$INK2" "encore une fois   $INK$b$([ "$field" = 2 ] && printf '▏')"
@@ -299,7 +305,7 @@ draw_copy() { # draw_copy <current index> <percent> <minutes left>
       line "$INK2" "$(printf '%-24s' "${tasks[$i]}")$FAINT fait"
     elif [ "$i" -eq "$1" ]; then
       local cells=$(($2 * 20 / 100))
-      line "$INK" "$(printf '%-24s' "${tasks[$i]}")$(printf '%*s' "$cells" '' | tr ' ' '█')$FAINT$(printf '%*s' $((20 - cells)) '' | tr ' ' '░')$INK $(printf '%3d' "$2") %"
+      line "$INK" "$(printf '%-24s' "${tasks[$i]}")$(repeat '█' "$cells")$FAINT$(repeat '░' $((20 - cells)))$INK $(printf '%3d' "$2") %"
     else
       line "$FAINT" "${tasks[$i]}"
     fi
@@ -348,7 +354,8 @@ install_system() {
   fi
 
   # The copy: progress by the store paths already there.
-  local total done=0 pid started now left
+  # Not `left`: that one is the block's column, for every line drawn.
+  local total done=0 pid started now remaining
   total=$(nix-store -qR "$system" | wc -l)
   started=$(date +%s)
   nix --extra-experimental-features nix-command copy --no-check-sigs --to /mnt "$system" >>"$log" 2>&1 &
@@ -357,12 +364,12 @@ install_system() {
     done=$(find /mnt/nix/store -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
     [ "$done" -gt "$total" ] && done=$total
     now=$(date +%s)
-    left='3 min'
+    remaining='3 min'
     if [ "$done" -gt 10 ]; then
       local rest=$(((total - done) * (now - started) / done))
-      left="$((rest / 60 + 1)) min"
+      remaining="$((rest / 60 + 1)) min"
     fi
-    draw_copy 3 $((done * 100 / total)) "$left"
+    draw_copy 3 $((done * 100 / total)) "$remaining"
     sleep 1
   done
   wait "$pid" || { fail 'copie du système : erreur d’écriture sur le disque'; return 1; }

@@ -45,10 +45,11 @@ let
     # The author reads French: its apostrophe (’) is typographic, on purpose.
     excludeShellChecks = [ "SC1112" ];
     # kmscon starts the installer with an empty environment: what it needs is
-    # written ahead of it, the system's tools as a last resort.
+    # written ahead of it, the system's tools as a last resort, and a UTF-8
+    # locale (accents counted as one character, typed as one key).
     text =
       lib.concatStrings (lib.mapAttrsToList (k: v: "export ${k}=${lib.escapeShellArg v}\n") env)
-      + "export PATH=\"$PATH:/run/current-system/sw/bin\"\n"
+      + "export PATH=\"$PATH:/run/current-system/sw/bin\" LANG=C.UTF-8\n"
       + builtins.readFile ./install.sh;
   };
   env = {
