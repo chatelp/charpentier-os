@@ -66,19 +66,36 @@
       # An install key's image, for the given systems (one per keyboard),
       # named after them: charpentier-x250-<version>.iso, or -dev- for the
       # development key, never mistaken for the other when written.
-      installerOf =
-        name: systems:
-        (nixpkgs.lib.nixosSystem {
+      installerSystem =
+        module: systems:
+        nixpkgs.lib.nixosSystem {
           inherit system;
           specialArgs = {
             version = app.version;
             systems = nixpkgs.lib.mapAttrs (_: s: s.config.system.build.toplevel) systems;
           };
-          modules = [
-            ./installer
-            { image.baseName = lib.mkOverride 40 "${name}-${app.version}"; }
-          ];
-        }).config.system.build.isoImage;
+          modules = [ module ];
+        };
+      installerOf =
+        name: systems:
+        (installerSystem {
+          imports = [ ./installer/iso.nix ];
+          image.baseName = lib.mkOverride 40 "${name}-${app.version}";
+        } systems).config.system.build.isoImage;
+      # The same installer from the network (phase 5.9 ter): bzImage, initrd
+      # and cmdline, which the CI sends to the sync server for Pixiecore.
+      netbootOf =
+        systems:
+        let
+          inherit (installerSystem ./installer/netboot.nix systems) config;
+          build = config.system.build;
+        in
+        nixpkgs.legacyPackages.${system}.runCommand "charpentier-x250-netboot-${app.version}" { } ''
+          mkdir $out
+          ln -s ${build.kernel}/${config.system.boot.loader.kernelFile} $out/bzImage
+          ln -s ${build.netbootRamdisk}/initrd $out/initrd
+          echo "init=${build.toplevel}/init ${toString config.boot.kernelParams}" > $out/cmdline
+        '';
     in
     {
       nixosConfigurations = {
@@ -105,6 +122,11 @@
           azerty = self.nixosConfigurations.x250-dev;
           bepo = self.nixosConfigurations.x250-dev-bepo;
           qwerty = self.nixosConfigurations.x250-dev-qwerty;
+        };
+        netboot = netbootOf {
+          azerty = self.nixosConfigurations.x250;
+          bepo = self.nixosConfigurations.x250-bepo;
+          qwerty = self.nixosConfigurations.x250-qwerty;
         };
         default = self.packages.${system}.installer;
         # The install key tried from end to end in a virtual machine, by OCR

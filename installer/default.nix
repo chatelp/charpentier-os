@@ -2,7 +2,8 @@
 # « Installation »): a minimal NixOS loaded in memory (the key may be pulled
 # at the end), the X250's system already built for each keyboard, and the
 # installer on the first console, in kmscon; on the kernel's console if
-# kmscon fails. No menu, no kernel text.
+# kmscon fails. No menu, no kernel text. What the key and the network add:
+# ./iso.nix and ./netboot.nix.
 {
   config,
   lib,
@@ -55,6 +56,7 @@ let
   env = {
     CHARPENTIER_VERSION = version;
     CHARPENTIER_KEY_LABEL = label;
+    CHARPENTIER_NETBOOT = if config.charpentier.installer.netboot then "1" else "0";
     CHARPENTIER_SYSTEMS = lib.concatStringsSep "," (lib.mapAttrsToList (k: s: "${k}=${s}") systems);
   };
   # kmscon takes its keyboard when it starts: the installer restarts the
@@ -76,97 +78,95 @@ let
   '';
 in
 {
-  imports = [ "${modulesPath}/installer/cd-dvd/installation-cd-minimal.nix" ];
+  options.charpentier.installer.netboot = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = "Started from the network (./netboot.nix), not from the key (./iso.nix).";
+  };
 
-  image.baseName = lib.mkForce "charpentier-x250-${version}";
-  isoImage.volumeID = label;
-  isoImage.appendToMenuLabel = "";
-  # The X250's systems, one per keyboard, already built: nothing to download.
-  isoImage.storeContents = lib.attrValues systems;
-  isoImage.squashfsCompression = "zstd -Xcompression-level 6";
-
-  # Loaded in memory, quiet, straight on.
-  boot.kernelParams = [
-    "copytoram"
-    "quiet"
-    "loglevel=3"
-    "rd.udev.log_level=3"
-    "systemd.show_status=false"
-    "vt.global_cursor_default=0"
-  ];
-  boot.consoleLogLevel = 0;
-  boot.initrd.verbose = false;
-  boot.loader.timeout = lib.mkForce 0;
-
-  # The fallback: the kernel's console, Terminus, the same palette.
-  console = {
-    earlySetup = true;
-    packages = [ pkgs.terminus_font ];
-    font = "ter-v24n";
-    colors = [
-      "14161a"
-      "c45a3c"
-      "8fae86"
-      "d6b46a"
-      "86aedb"
-      "b48ead"
-      "88c0d0"
-      "b9c0ca"
-      "555b66"
-      "c45a3c"
-      "8fae86"
-      "d6b46a"
-      "86aedb"
-      "b48ead"
-      "88c0d0"
-      "dfe3ea"
+  config = {
+    # Quiet, straight on.
+    boot.kernelParams = [
+      "quiet"
+      "loglevel=3"
+      "rd.udev.log_level=3"
+      "systemd.show_status=false"
+      "vt.global_cursor_default=0"
     ];
-  };
-  fonts.packages = [ pkgs.jetbrains-mono ];
-  fonts.fontconfig.enable = true;
+    boot.consoleLogLevel = 0;
+    boot.initrd.verbose = false;
+    boot.loader.timeout = lib.mkForce 0;
 
-  # No login on the first console: the installer is there.
-  services.getty.autologinUser = lib.mkForce null;
-  services.getty.helpLine = lib.mkForce "";
-  systemd.services."getty@tty1".enable = false;
-  systemd.services."autovt@tty1".enable = false;
-
-  systemd.services.charpentier-installer = {
-    description = "Installation de Charpentier";
-    wantedBy = [ "multi-user.target" ];
-    after = [
-      "systemd-udev-settle.service"
-      "systemd-vconsole-setup.service"
-    ];
-    onFailure = [ "charpentier-installer-plain.service" ];
-    serviceConfig = {
-      ExecStart = kmscon;
-      Restart = "on-failure";
-      RestartSec = 0;
+    # The fallback: the kernel's console, Terminus, the same palette.
+    console = {
+      earlySetup = true;
+      packages = [ pkgs.terminus_font ];
+      font = "ter-v24n";
+      colors = [
+        "14161a"
+        "c45a3c"
+        "8fae86"
+        "d6b46a"
+        "86aedb"
+        "b48ead"
+        "88c0d0"
+        "b9c0ca"
+        "555b66"
+        "c45a3c"
+        "8fae86"
+        "d6b46a"
+        "86aedb"
+        "b48ead"
+        "88c0d0"
+        "dfe3ea"
+      ];
     };
-    unitConfig.StartLimitBurst = 50;
-  };
+    fonts.packages = [ pkgs.jetbrains-mono ];
+    fonts.fontconfig.enable = true;
 
-  systemd.services.charpentier-installer-plain = {
-    description = "Installation de Charpentier (console du noyau)";
-    environment.CHARPENTIER_PLAIN = "1";
-    serviceConfig = {
-      ExecStart = lib.getExe installer;
-      StandardInput = "tty";
-      StandardOutput = "tty";
-      TTYPath = "/dev/tty1";
-      TTYReset = true;
-      TTYVHangup = true;
-      Restart = "always";
+    # No login on the first console: the installer is there.
+    services.getty.autologinUser = lib.mkForce null;
+    services.getty.helpLine = lib.mkForce "";
+    systemd.services."getty@tty1".enable = false;
+    systemd.services."autovt@tty1".enable = false;
+
+    systemd.services.charpentier-installer = {
+      description = "Installation de Charpentier";
+      wantedBy = [ "multi-user.target" ];
+      after = [
+        "systemd-udev-settle.service"
+        "systemd-vconsole-setup.service"
+      ];
+      onFailure = [ "charpentier-installer-plain.service" ];
+      serviceConfig = {
+        ExecStart = kmscon;
+        Restart = "on-failure";
+        RestartSec = 0;
+      };
+      unitConfig.StartLimitBurst = 50;
     };
-  };
 
-  environment.systemPackages = [ installer ];
-  networking.hostName = "charpentier-installation";
-  # The installer formats ext4 only: no ZFS on the key.
-  boot.supportedFilesystems.zfs = lib.mkForce false;
-  networking.wireless.enable = lib.mkForce false;
-  networking.networkmanager.enable = lib.mkForce false;
-  documentation.enable = lib.mkForce false;
-  system.stateVersion = "26.05";
+    systemd.services.charpentier-installer-plain = {
+      description = "Installation de Charpentier (console du noyau)";
+      environment.CHARPENTIER_PLAIN = "1";
+      serviceConfig = {
+        ExecStart = lib.getExe installer;
+        StandardInput = "tty";
+        StandardOutput = "tty";
+        TTYPath = "/dev/tty1";
+        TTYReset = true;
+        TTYVHangup = true;
+        Restart = "always";
+      };
+    };
+
+    environment.systemPackages = [ installer ];
+    networking.hostName = "charpentier-installation";
+    # The installer formats ext4 only: no ZFS on the key.
+    boot.supportedFilesystems.zfs = lib.mkForce false;
+    networking.wireless.enable = lib.mkForce false;
+    networking.networkmanager.enable = lib.mkForce false;
+    documentation.enable = lib.mkForce false;
+    system.stateVersion = "26.05";
+  };
 }

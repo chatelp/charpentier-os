@@ -18,6 +18,7 @@ set -uo pipefail
 version=${CHARPENTIER_VERSION:-0.0.0}
 plain=${CHARPENTIER_PLAIN:-0}
 key_label=${CHARPENTIER_KEY_LABEL:-CHARPENTIER}
+netboot=${CHARPENTIER_NETBOOT:-0}
 state=/run/charpentier
 log=$state/install.log
 mkdir -p "$state"
@@ -137,7 +138,11 @@ welcome() {
     clear_screen
     head_lines 0
     line "$INK" "installer charpentier $version sur cet ordinateur"
-    line "$INK2" 'tout est sur la clé : rien à télécharger, pas besoin de réseau'
+    if [ "$netboot" = 1 ]; then
+      line "$INK2" 'tout est chargé : rien d’autre à télécharger, le câble peut rester'
+    else
+      line "$INK2" 'tout est sur la clé : rien à télécharger, pas besoin de réseau'
+    fi
     line "$FAINT" 'environ 5 minutes'
     gap
     local keys=''
@@ -313,7 +318,11 @@ draw_copy() { # draw_copy <current index> <percent> <minutes left>
     fi
   done
   gap
-  line "$INK2" "ne pas éteindre, ne pas retirer la clé$FAINT · encore $3"
+  if [ "$netboot" = 1 ]; then
+    line "$INK2" "ne pas éteindre$FAINT · encore $3"
+  else
+    line "$INK2" "ne pas éteindre, ne pas retirer la clé$FAINT · encore $3"
+  fi
 }
 failed_step=''
 fail() {
@@ -325,7 +334,7 @@ run() { "$@" >>"$log" 2>&1; }
 install_system() {
   local system part_boot part_root
   system=$(tr ',' '\n' <<<"${CHARPENTIER_SYSTEMS:-}" | awk -F= -v l="$layout" '$1 == l { print $2 }')
-  [ -n "$system" ] || { echo "no system for $layout" >>"$log"; fail 'copie du système : système absent de la clé'; return 1; }
+  [ -n "$system" ] || { echo "no system for $layout" >>"$log"; fail 'copie du système : système absent de l’installateur'; return 1; }
   : >"$log"
 
   draw_copy 0 0 '5 min'
@@ -392,7 +401,11 @@ failure() {
     head_lines 3
     line "$INV" ' l’installation s’est arrêtée '
     line "$INK" "$failed_step"
-    line "$INK2" 'le disque n’est pas utilisable en l’état, la clé n’a pas bougé'
+    if [ "$netboot" = 1 ]; then
+      line "$INK2" 'le disque n’est pas utilisable en l’état'
+    else
+      line "$INK2" 'le disque n’est pas utilisable en l’état, la clé n’a pas bougé'
+    fi
     gap
     line "$INK" "$enter recommencer depuis le début"
     line "$FAINT" 'd détail · échap éteindre'
@@ -415,6 +428,8 @@ the_end() {
   local k out=0
   while true; do
     key_present || out=1
+    # From the network (5.9 ter): no key to pull.
+    [ "$netboot" = 1 ] && out=1
     clear_screen
     head_lines 4
     line "$INK" 'charpentier est installé'
@@ -423,7 +438,9 @@ the_end() {
     line "$INK2" '  1 le mot de passe du disque'
     line "$INK2" '  2 charpentier, et ses quatre réglages : wifi, code, synchronisation, compagnon'
     gap
-    if [ "$out" = 1 ]; then
+    if [ "$netboot" = 1 ]; then
+      line "$INK" "$enter redémarrer"
+    elif [ "$out" = 1 ]; then
       line "$INK2" 'clé retirée'
       line "$INK" "$enter redémarrer"
     else
