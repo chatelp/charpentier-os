@@ -34,10 +34,15 @@ let
   };
   layout = layouts.${cfg.keyboard};
 
+  # The app's test mode, in the development variant only (./dev.nix).
+  testMode = lib.optionalString (
+    cfg.testPort != null
+  ) "export CHARPENTIER_TEST_PORT=${toString cfg.testPort}\n";
+
   # The app, started again if it ever stops; Wayland native.
   session = pkgs.writeShellScript "charpentier-session" ''
     export NIXOS_OZONE_WL=1
-    while true; do
+    ${testMode}while true; do
       ${lib.getExe charpentier} --appliance
       sleep 1
     done
@@ -90,6 +95,14 @@ in
     ];
     default = "azerty";
     description = "The keyboard chosen at installation (docs/DESIGN.md §4.12 « Installation »).";
+  };
+  # The app's test mode (phase 5.10 bis): Chromium's debugging port, on
+  # 127.0.0.1 only. Set by the development variant (./dev.nix), never by the
+  # writing one.
+  options.charpentier.testPort = lib.mkOption {
+    type = lib.types.nullOr lib.types.port;
+    default = null;
+    description = "CHARPENTIER_TEST_PORT given to the app; null in the writing variant.";
   };
 
   config = {
