@@ -1,0 +1,112 @@
+# What reaches the X250 (D-31, phase 5.11): the three systems copied, signed,
+# into the cache on the sync server, then the « latest » pointer.
+# - On main, when the app's input moved to a release (vX.Y.Z): version X.Y.Z.
+# - On a release of charpentier-os (a change of the system alone), tagged
+#   X.Y.Z-N by Pierre, X.Y.Z being the app's version: version X.Y.Z-N.
+# Any other change on main waits for one of them.
+name: publish
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  SERVER: https://charpentier.chatel.pm
+
+jobs:
+  publish:
+    name: cache et pointeur
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: DeterminateSystems/nix-installer-action@v23
+
+      - name: Version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_NOTES: ${{ github.event.release.body }}
+        run: |
+          app=$(nix eval --raw .#charpentier.version)
+          if [ "$EVENT" = release ]; then
+            version=${RELEASE_TAG#v}
+            [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ && "${version%%-*}" = "$app" ]] ||
+              { echo "::error::release « $RELEASE_TAG »: $app or $app-N expected (the app's version, then the system's)"; exit 1; }
+            printf '%s\n' "$RELEASE_NOTES" >notes.md
+          else
+            rev() { jq -r '.nodes.charpentier.locked.rev // ""'; }
+            now=$(rev <flake.lock)
+            was=$(git show "$BEFORE:flake.lock" 2>/dev/null | rev || true)
+            ref=$(jq -r '.nodes.charpentier.original.ref // ""' flake.lock)
+            if [ "$now" = "$was" ] || ! [[ "$ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::notice::nothing for the X250: the app did not move to a release (ref « $ref »)"
+              echo "publish=false" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+            version=$app
+            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '.[0].body // ""' >notes.md
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "publish=true" >>"$GITHUB_OUTPUT"
+          echo "::notice::version $version"
+
+      - name: Disk
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/local/share/powershell
+          df -h /
+
+      - name: Systems
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          for k in azerty bepo qwerty; do
+            case $k in azerty) c=x250 ;; *) c=x250-$k ;; esac
+            nix build --no-link --print-out-paths --print-build-logs \
+              ".#nixosConfigurations.$c.config.system.build.toplevel" >"system-$k"
+          done
+          cat system-*
+
+      - name: Into the cache, signed
+        if: steps.version.outputs.publish == 'true'
+        env:
+          NIX_SIGNING_KEY: ${{ secrets.NIX_SIGNING_KEY }}
+          CACHE_TOKEN: ${{ secrets.CHARPENTIER_CACHE_TOKEN }}
+        run: |
+          umask 077
+          printf '%s' "$NIX_SIGNING_KEY" >"$RUNNER_TEMP/signing-key"
+          printf 'machine charpentier.chatel.pm login ci password %s\n' "$CACHE_TOKEN" >"$RUNNER_TEMP/netrc"
+          mapfile -t systems < <(cat system-azerty system-bepo system-qwerty)
+          nix copy --option netrc-file "$RUNNER_TEMP/netrc" \
+            --to "$SERVER/nix-cache?compression=zstd&secret-key=$RUNNER_TEMP/signing-key" \
+            "${systems[@]}"
+
+      - name: The pointer
+        if: steps.version.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CACHE_TOKEN: ${{ secrets.CHARPENTIER_CACHE_TOKEN }}
+        run: |
+          jq -n --arg version "$VERSION" --rawfile notes notes.md \
+            --arg azerty "$(cat system-azerty)" --arg bepo "$(cat system-bepo)" --arg qwerty "$(cat system-qwerty)" \
+            '{version: $version, notes: $notes, systems: {azerty: $azerty, bepo: $bepo, qwerty: $qwerty}}' >pointer.json
+          cat pointer.json
+          curl --fail-with-body --silent --show-error -X PUT "$SERVER/api/updates/latest" \
+            -H "Authorization: Bearer $CACHE_TOKEN" -H 'Content-Type: application/json' --data @pointer.json
