@@ -41,6 +41,8 @@ line() { # line [style] text…
   row=$((row + 1))
 }
 gap() { row=$((row + 1)); }
+# pad <text> <width>: printf's %-Ns counts bytes, and « è » is two of them.
+pad() { printf '%s%*s' "$1" $(($2 - ${#1})) ''; }
 # repeat <character> <count>: tr would cut a character of several bytes.
 repeat() {
   local s
@@ -302,10 +304,10 @@ draw_copy() { # draw_copy <current index> <percent> <minutes left>
   head_lines 3
   for i in "${!tasks[@]}"; do
     if [ "$i" -lt "$1" ]; then
-      line "$INK2" "$(printf '%-24s' "${tasks[$i]}")$FAINT fait"
+      line "$INK2" "$(pad "${tasks[$i]}" 24)$FAINT fait"
     elif [ "$i" -eq "$1" ]; then
       local cells=$(($2 * 20 / 100))
-      line "$INK" "$(printf '%-24s' "${tasks[$i]}")$(repeat '█' "$cells")$FAINT$(repeat '░' $((20 - cells)))$INK $(printf '%3d' "$2") %"
+      line "$INK" "$(pad "${tasks[$i]}" 24)$(repeat '█' "$cells")$FAINT$(repeat '░' $((20 - cells)))$INK $(printf '%3d' "$2") %"
     else
       line "$FAINT" "${tasks[$i]}"
     fi
