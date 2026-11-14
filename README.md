@@ -44,6 +44,13 @@ Le X250 ne reçoit que des versions numérotées (D-31, phase 5.11 du plan de l'
 - Réglages : « Allow auto-merge » ; une règle sur main qui demande une pull request et le check « systèmes, clé et essai en VM », sans approbation.
 - Dans l'app : le jeton `CHARPENTIER_OS_DISPATCH` qui envoie le `repository_dispatch`.
 
+## Installation par le réseau
+
+Phase 5.9 ter (D-32) : le X250 démarre l'installateur par son câble Ethernet, sans clé (F12, puis la carte réseau). Le même installateur que la clé (`installer/default.nix`), en noyau, initrd (le système en mémoire, environ 1,5 Go compressé) et ligne de commande : `packages.netboot` (`installer/netboot.nix`), envoyé par `publish.yml` sur le serveur de synchro (`PUT /api/netboot/<version>/{bzImage,initrd,cmdline}`) avec l'image de la clé. Sur la maison, Pixiecore (profil `netboot` de l'app, éteint par défaut) répond en proxyDHCP sans remplacer la box et demande au serveur quoi démarrer : l'installateur pour la seule MAC du X250, rien aux autres. Sans clé, la fin de l'installation dit seulement « ⏎ redémarrer ».
+
+- Préalables sur le X250 : « UEFI IPv4 Network Stack » activé dans le BIOS, Secure Boot désactivé (iPXE n'est pas signé).
+- `scripts/try-netboot.sh` l'essaie sur le Yoga L13 **sans root et sans toucher à son réseau** : un espace de noms réseau à lui, un pont, dnsmasq dans le rôle de la box (dans son propre espace, sur le même pont), Pixiecore en mode API, un faux du serveur (`scripts/netboot-api.py`, le contrat de `apps/server/src/netboot.ts` de l'app) et une machine virtuelle qui démarre sur le réseau. `--other` : une autre MAC, qui ne reçoit rien. Essayé le 14 novembre 2026 : l'installateur en 55 s pour la MAC déclarée (noyau 12 Mio, initrd 1,46 Gio) ; « PXE-E16 No valid offer » pour l'autre, aucun fichier servi.
+
 ## Version développement du X250
 
 Pour les essais depuis le Yoga L13 (phases 5.10 et 5.10 bis du plan) : le système d'écriture, plus un accès SSH **par clé seulement**, en tant qu'`auteur`, **depuis le réseau de la maison seulement** (port 22 ouvert aux seules adresses privées, IPv6 de lien local et ULA ; pas de Tailscale), et le mode d'essai de l'app (`CHARPENTIER_TEST_PORT=9222`, sur 127.0.0.1, joint par un tunnel SSH). Elle porte le marqueur `/etc/charpentier/variant` (`developpement`) et le tag `developpement` au menu de démarrage ; le service de mise à jour (5.12) n'installe rien sur elle et refuse de l'installer ailleurs. La version d'écriture n'ouvre aucun port.
