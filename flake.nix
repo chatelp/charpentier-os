@@ -14,6 +14,9 @@
     # `--override-input charpentier path:<the app's checkout>`.
     charpentier.url = "github:chatelp/charpentier";
     charpentier.inputs.nixpkgs.follows = "nixpkgs";
+    # The disk's layout for nixos-anywhere (development variant only).
+    disko.url = "github:nix-community/disko";
+    disko.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
@@ -22,6 +25,7 @@
       nixpkgs,
       nixos-hardware,
       charpentier,
+      disko,
       ...
     }:
     let
@@ -40,30 +44,90 @@
             { charpentier.keyboard = keyboard; }
           ];
         };
+      # The development variant (phase 5.10 bis, hosts/x250/dev.nix): SSH by
+      # key from the home network, the app's test mode. Its keys: the build
+      # machine's, in hosts/x250/dev-keys.pub (one per line).
+      lib = nixpkgs.lib;
+      devKeys = ./hosts/x250/dev-keys.pub;
+      x250-dev =
+        keyboard:
+        (x250 keyboard).extendModules {
+          modules = [
+            ./hosts/x250/dev.nix
+            disko.nixosModules.disko
+            ./hosts/x250/disko.nix
+            {
+              charpentier.dev.authorizedKeys = lib.optionals (builtins.pathExists devKeys) (
+                lib.filter (l: l != "" && !lib.hasPrefix "#" l) (lib.splitString "\n" (builtins.readFile devKeys))
+              );
+            }
+          ];
+        };
+      # An install key's image, for the given systems (one per keyboard),
+      # named after them: charpentier-x250-<version>.iso, or -dev- for the
+      # development key, never mistaken for the other when written.
+      installerSystem =
+        module: systems:
+        nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = {
+            version = app.version;
+            systems = nixpkgs.lib.mapAttrs (_: s: s.config.system.build.toplevel) systems;
+          };
+          modules = [ module ];
+        };
+      installerOf =
+        name: systems:
+        (installerSystem {
+          imports = [ ./installer/iso.nix ];
+          image.baseName = lib.mkOverride 40 "${name}-${app.version}";
+        } systems).config.system.build.isoImage;
+      # The same installer from the network (phase 5.9 ter): bzImage, initrd
+      # and cmdline, which the CI sends to the sync server for Pixiecore.
+      netbootOf =
+        systems:
+        let
+          inherit (installerSystem ./installer/netboot.nix systems) config;
+          build = config.system.build;
+        in
+        nixpkgs.legacyPackages.${system}.runCommand "charpentier-x250-netboot-${app.version}" { } ''
+          mkdir $out
+          ln -s ${build.kernel}/${config.system.boot.loader.kernelFile} $out/bzImage
+          ln -s ${build.netbootRamdisk}/initrd $out/initrd
+          echo "init=${build.toplevel}/init ${toString config.boot.kernelParams}" > $out/cmdline
+        '';
     in
     {
       nixosConfigurations = {
         x250 = x250 "azerty";
         x250-bepo = x250 "bepo";
         x250-qwerty = x250 "qwerty";
+        # Never built nor published by CI (5.11): the build machine's only.
+        x250-dev = x250-dev "azerty";
+        x250-dev-bepo = x250-dev "bepo";
+        x250-dev-qwerty = x250-dev "qwerty";
       };
 
       packages.${system} = {
         charpentier = app;
         # The install key's image (phase 5.9 bis), written by scripts/flash-installer.sh.
-        installer =
-          (nixpkgs.lib.nixosSystem {
-            inherit system;
-            specialArgs = {
-              version = app.version;
-              systems = nixpkgs.lib.mapAttrs (_: s: s.config.system.build.toplevel) {
-                azerty = self.nixosConfigurations.x250;
-                bepo = self.nixosConfigurations.x250-bepo;
-                qwerty = self.nixosConfigurations.x250-qwerty;
-              };
-            };
-            modules = [ ./installer ];
-          }).config.system.build.isoImage;
+        installer = installerOf "charpentier-x250" {
+          azerty = self.nixosConfigurations.x250;
+          bepo = self.nixosConfigurations.x250-bepo;
+          qwerty = self.nixosConfigurations.x250-qwerty;
+        };
+        # The same key with the development variant: the first installation
+        # of a development X250 (or VM), by hand; never published.
+        installer-dev = installerOf "charpentier-x250-dev" {
+          azerty = self.nixosConfigurations.x250-dev;
+          bepo = self.nixosConfigurations.x250-dev-bepo;
+          qwerty = self.nixosConfigurations.x250-dev-qwerty;
+        };
+        netboot = netbootOf {
+          azerty = self.nixosConfigurations.x250;
+          bepo = self.nixosConfigurations.x250-bepo;
+          qwerty = self.nixosConfigurations.x250-qwerty;
+        };
         default = self.packages.${system}.installer;
         # The install key tried from end to end in a virtual machine, by OCR
         # and the QEMU monitor (scripts/test-installer.py): here and in CI.

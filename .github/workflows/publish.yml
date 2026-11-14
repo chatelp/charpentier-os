@@ -157,3 +157,19 @@ jobs:
         run: |
           image=$(ls dist/installer/iso/*.iso)
           python3 scripts/publish.py file "api/installer/$VERSION" "$image"
+          rm -rf dist/installer
+
+      # The same installer from the network (phase 5.9 ter): the kernel, the
+      # initrd and their command line, which the server hands to Pixiecore
+      # for the X250's MAC only, on the home network only.
+      - name: Network image
+        run: scripts/nix.sh --out dist/netboot build --print-build-logs .#netboot
+
+      - name: Network image, onto the server
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+          CHARPENTIER_CACHE_TOKEN: ${{ secrets.CHARPENTIER_CACHE_TOKEN }}
+        run: |
+          for f in bzImage initrd cmdline; do
+            python3 scripts/publish.py file "api/netboot/$VERSION/$f" "dist/netboot/$f"
+          done

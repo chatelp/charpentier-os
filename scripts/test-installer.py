@@ -10,6 +10,10 @@ password, refused, then the right one) and the app's first screen.
     nix run .#test-installer                 # the newest image in dist/installer
     nix run .#test-installer -- --timeout-copy 3600   # emulation, no KVM
 
+The development key, in a machine of its own, left running (SSH on port 2222):
+
+    CHARPENTIER_VM=dist/vm-dev CHARPENTIER_IMAGES=dist/installer-dev     CHARPENTIER_MONITOR=45455 OUT=dist/test-installer-dev nix run .#test-installer --       --keep -- -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:2222-:22
+
 Screenshots of every step land in dist/test-installer; the run fails on the
 first screen that does not come, with its screenshot and what the OCR read.
 """
@@ -22,8 +26,8 @@ import subprocess
 import sys
 import time
 
-MONITOR = ("127.0.0.1", 45454)
-OUT = "dist/test-installer"
+MONITOR = ("127.0.0.1", int(os.environ.get("CHARPENTIER_MONITOR", "45454")))
+OUT = os.environ.get("OUT", "dist/test-installer")
 PASSWORD = "charpente"  # in azerty: letters away from a/q, z/w and m
 WRONG = "charpentf"
 
@@ -108,6 +112,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--timeout-boot", type=int, default=300)
     parser.add_argument("--timeout-copy", type=int, default=1200)
+    parser.add_argument("--keep", action="store_true", help="leave the machine running at the end")
+    parser.add_argument("qemu", nargs="*", help="QEMU options, after --")
     args = parser.parse_args()
 
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -115,7 +121,7 @@ def main():
     for f in os.listdir(OUT):
         os.remove(os.path.join(OUT, f))
 
-    vm = subprocess.Popen(["scripts/try-installer.sh", "--", "-display", "none"])
+    vm = subprocess.Popen(["scripts/try-installer.sh", "--", "-display", "none", *args.qemu])
     try:
         for _ in range(60):
             try:
@@ -153,6 +159,9 @@ def main():
         # The app, at its first start.
         wait_for(r"Bienvenue", args.timeout_boot, "app")
         print("installation, disk password and app: all seen", flush=True)
+        if args.keep:
+            print(f"left running; its monitor: {MONITOR[0]}:{MONITOR[1]}", flush=True)
+            vm.wait()
     finally:
         try:
             monitor("quit")

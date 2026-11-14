@@ -34,10 +34,15 @@ let
   };
   layout = layouts.${cfg.keyboard};
 
+  # The app's test mode, in the development variant only (./dev.nix).
+  testMode = lib.optionalString (
+    cfg.testPort != null
+  ) "export CHARPENTIER_TEST_PORT=${toString cfg.testPort}\n";
+
   # The app, started again if it ever stops; Wayland native.
   session = pkgs.writeShellScript "charpentier-session" ''
     export NIXOS_OZONE_WL=1
-    while true; do
+    ${testMode}while true; do
       ${lib.getExe charpentier} --appliance
       sleep 1
     done
@@ -80,7 +85,10 @@ let
 in
 {
   # The disk's password screen.
-  imports = [ ./plymouth ];
+  imports = [
+    ./plymouth
+    ./update
+  ];
 
   options.charpentier.keyboard = lib.mkOption {
     type = lib.types.enum [
@@ -90,6 +98,14 @@ in
     ];
     default = "azerty";
     description = "The keyboard chosen at installation (docs/DESIGN.md §4.12 « Installation »).";
+  };
+  # The app's test mode (phase 5.10 bis): Chromium's debugging port, on
+  # 127.0.0.1 only. Set by the development variant (./dev.nix), never by the
+  # writing one.
+  options.charpentier.testPort = lib.mkOption {
+    type = lib.types.nullOr lib.types.port;
+    default = null;
+    description = "CHARPENTIER_TEST_PORT given to the app; null in the writing variant.";
   };
 
   config = {
@@ -218,6 +234,8 @@ in
       swayidle
       wlsunset
       foot
+      # Whether the Wi-Fi card can be an access point (5.13): `iw list`.
+      iw
       charpentier
     ];
     # Without a password, for the author's session: the clock and the keys.
@@ -231,6 +249,18 @@ in
           return polkit.Result.YES;
         }
       });
+    '';
+
+    # The first start from the phone (phase 5.13): the app opens a temporary
+    # Wi-Fi (`nmcli device wifi hotspot`, NetworkManager's shared mode, its
+    # dnsmasq on 10.42.0.0/24) and serves its page on 10.42.0.1:8080. Open on
+    # the Wi-Fi only, to that network only: DHCP (whose first request comes
+    # from 0.0.0.0), DNS, and the page. Nothing listens there afterwards.
+    networking.firewall.extraCommands = ''
+      iptables -A nixos-fw -i wl+ -p udp --dport 67 -j nixos-fw-accept
+      iptables -A nixos-fw -i wl+ -s 10.42.0.0/24 -p udp --dport 53 -j nixos-fw-accept
+      iptables -A nixos-fw -i wl+ -s 10.42.0.0/24 -p tcp --dport 53 -j nixos-fw-accept
+      iptables -A nixos-fw -i wl+ -s 10.42.0.0/24 -p tcp --dport 8080 -j nixos-fw-accept
     '';
 
     # The batteries and the lid: TLP, sleep when the lid closes.

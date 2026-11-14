@@ -120,17 +120,27 @@ def cache(roots):
     if not todo:
         return
     with tempfile.TemporaryDirectory(dir=os.environ.get("RUNNER_TEMP")) as local:
+        # The whole closure into a local cache: a file:// cache refuses a path
+        # whose references it lacks, so --no-recursive of the missing paths
+        # alone fails as soon as the server has some of them. Only the
+        # missing ones are sent.
         subprocess.run(
-            ["nix", "copy", "--no-recursive", "--to", f"file://{local}?compression=zstd&secret-key={key}", *todo],
+            [
+                "nix",
+                "copy",
+                "--to",
+                f"file://{local}?compression=zstd&parallel-compression=true&secret-key={key}",
+                *roots,
+            ],
             check=True,
         )
         files = []
-        for top, _, names in os.walk(local):
-            for name in names:
-                rel = os.path.relpath(os.path.join(top, name), local)
-                if rel != "nix-cache-info":
-                    files.append(rel)
-        # The NARs (and logs) first, the .narinfo last.
+        for path in todo:
+            narinfo = os.path.basename(path).split("-", 1)[0] + ".narinfo"
+            with open(os.path.join(local, narinfo)) as f:
+                url = next(line.split(": ", 1)[1].strip() for line in f if line.startswith("URL: "))
+            files += [url, narinfo]
+        # The NARs first, the .narinfo last.
         files.sort(key=lambda rel: (rel.endswith(".narinfo"), rel))
         for i, rel in enumerate(files, 1):
             print(f"[{i}/{len(files)}] {rel} ({os.path.getsize(os.path.join(local, rel)) >> 20} MiB)", flush=True)

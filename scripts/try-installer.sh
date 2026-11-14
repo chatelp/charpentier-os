@@ -14,9 +14,14 @@
 #   echo 'screendump shot.png -f png' | nc -q1 127.0.0.1 45454
 #   echo 'device_del /machine/peripheral-anon/device[0]' | nc -q1 127.0.0.1 45454   # pull the key
 # Everything lives in dist/vm: remove it to give the disk back.
+# Another machine beside it: CHARPENTIER_VM (its folder), CHARPENTIER_IMAGES
+# (where its image is, as dist/installer-dev for the development key) and
+# CHARPENTIER_MONITOR (the monitor's port).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-vm=dist/vm
+vm=${CHARPENTIER_VM:-dist/vm}
+images=${CHARPENTIER_IMAGES:-dist/installer}
+monitor=${CHARPENTIER_MONITOR:-45454}
 mkdir -p "$vm"
 
 # QEMU and the UEFI firmware from the same nixpkgs as the system.
@@ -32,8 +37,8 @@ fi
 
 key=()
 if [ "$disk_only" = 0 ]; then
-  image=$(ls -t dist/installer/iso/*.iso 2>/dev/null | head -1)
-  [ -n "$image" ] || { echo "pas d'image : scripts/nix.sh --out dist/installer build .#installer" >&2; exit 1; }
+  image=$(ls -t "$images"/iso/*.iso 2>/dev/null | head -1)
+  [ -n "$image" ] || { echo "pas d'image dans $images : scripts/nix.sh --out $images build .#installer" >&2; exit 1; }
   rm -f "$vm/disk.qcow2"
   install -m 644 "$ovmf/FV/OVMF_VARS.fd" "$vm/vars.fd"
   key=(-drive "if=none,id=key,format=raw,readonly=on,file=$image"
@@ -55,5 +60,5 @@ exec "$qemu/bin/qemu-system-x86_64" -machine q35 -accel "$accel" -cpu "$cpu" -sm
   ${key[@]+"${key[@]}"} \
   -drive "if=none,id=disk,format=qcow2,file=$vm/disk.qcow2" -device ide-hd,drive=disk,bus=ide.0 \
   -device virtio-vga -nic none \
-  -monitor tcp:127.0.0.1:45454,server,nowait \
+  -monitor "tcp:127.0.0.1:$monitor,server,nowait" \
   "$@"

@@ -7,6 +7,7 @@
 #
 #   scripts/try-plymouth.sh start           # the daemon and its window
 #   scripts/try-plymouth.sh ask             # what systemd-cryptsetup asks; again after ⏎ = a wrong password
+#   scripts/try-plymouth.sh status maj:0.6.0 # the update's line (what the initrd sends)
 #   scripts/try-plymouth.sh shot <file.png> # a screenshot of the window
 #   scripts/try-plymouth.sh stop
 set -euo pipefail
@@ -38,7 +39,8 @@ start)
   "$plymouth/bin/plymouth" show-splash
   ;;
 ask) setsid "$plymouth/bin/plymouth" ask-for-password --prompt='Please enter passphrase for disk charpentier (racine)' >"$state/answer" 2>&1 & ;;
+status) "$plymouth/bin/plymouth" update --status="$2" ;;
 shot) nix shell --inputs-from . nixpkgs#imagemagick -c import -window "$(window)" "$2" ;;
 stop) "$plymouth/bin/plymouth" quit || pkill -f "$plymouth/sbin/plymouthd" ;;
-*) sed -n '2,13p' "$0" >&2; exit 1 ;;
+*) sed -n '2,14p' "$0" >&2; exit 1 ;;
 esac
