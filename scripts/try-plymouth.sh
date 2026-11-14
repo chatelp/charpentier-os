@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tries the disk's password screen (hosts/x250/plymouth) in a window, on the
-# x86_64 Linux that builds it (the ThinkPad, under WSL2 with WSLg): plymouthd
+# x86_64 Linux that builds it (the Yoga L13, under WSL2 with WSLg): plymouthd
 # with its X11 renderer, the theme and font of the X250's initrd, no root (a
 # user namespace with its own /run and /etc). The keyboard is the window's,
 # not the console's: the layout is checked in the virtual machine only.
