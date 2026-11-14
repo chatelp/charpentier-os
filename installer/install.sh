@@ -338,8 +338,10 @@ install_system() {
   printf '%s' "$password" | run cryptsetup open --allow-discards --key-file - "$part_root" racine ||
     { fail 'chiffrement : le disque chiffré ne s’ouvre pas'; return 1; }
   run mkfs.ext4 -q -L racine /dev/mapper/racine || { fail 'chiffrement : formatage impossible'; return 1; }
-  run mount /dev/mapper/racine /mnt && mkdir -p /mnt/boot && run mount -o umask=0077 "$part_boot" /mnt/boot ||
-    { fail 'chiffrement : le disque ne se monte pas'; return 1; }
+  if ! { run mount /dev/mapper/racine /mnt && mkdir -p /mnt/boot && run mount -o umask=0077 "$part_boot" /mnt/boot; }; then
+    fail 'chiffrement : le disque ne se monte pas'
+    return 1
+  fi
 
   # The copy: progress by the store paths already there.
   local total done=0 pid started now left

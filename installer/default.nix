@@ -41,6 +41,8 @@ let
       config.system.build.nixos-install
     ];
     bashOptions = [ ];
+    # The author reads French: its apostrophe (’) is typographic, on purpose.
+    excludeShellChecks = [ "SC1112" ];
     text = builtins.readFile ./install.sh;
   };
   env = [
