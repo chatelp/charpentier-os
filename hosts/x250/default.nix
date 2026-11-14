@@ -71,6 +71,12 @@ let
 
     exec ${session}
   '';
+
+  # Straight into Sway as the author, at start and whenever it ends.
+  start = {
+    user = author;
+    command = "${lib.getExe pkgs.sway} --config ${swayConfig}";
+  };
 in
 {
   options.charpentier.keyboard = lib.mkOption {
@@ -167,11 +173,8 @@ in
     services.greetd = {
       enable = true;
       settings = {
-        initial_session = {
-          user = author;
-          command = "${lib.getExe pkgs.sway} --config ${swayConfig}";
-        };
-        default_session = config.services.greetd.settings.initial_session;
+        initial_session = start;
+        default_session = start;
       };
     };
     programs.sway = {
