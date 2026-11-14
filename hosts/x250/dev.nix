@@ -3,7 +3,12 @@
 # from zero (nixos-anywhere) and run the app's device tests against it.
 # It never reaches a normal X250: CI never builds nor publishes it (5.11), and
 # its marker, /etc/charpentier/variant, is refused by the update service (5.12).
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   cfg = config.charpentier.dev;
   # The home network only: private IPv4 ranges, IPv6 link-local and ULA.
@@ -59,6 +64,16 @@ in
       + lib.concatMapStrings (
         n: "ip6tables -A nixos-fw -p tcp --dport 22 -s ${n} -j nixos-fw-accept\n"
       ) lan6;
+    # Reachable from the build machine: no sleep when idle (the app's
+    # swayidle would suspend it after 15 minutes, out of SSH's reach). The
+    # lid still suspends (logind's LidSwitchIgnoreInhibited, on by default),
+    # and a test sleeps on purpose with `systemctl suspend --ignore-inhibitors`.
+    systemd.services.charpentier-dev-awake = {
+      description = "Version développement : joignable par SSH, pas de veille sur inactivité";
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig.ExecStart = "${pkgs.systemd}/bin/systemd-inhibit --what=sleep:idle --who=charpentier-dev --why=ssh --mode=block ${pkgs.coreutils}/bin/sleep infinity";
+    };
+
     # nixos-rebuild --target-host sends the system as the author.
     nix.settings.trusted-users = [ "auteur" ];
   };
