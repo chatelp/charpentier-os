@@ -44,7 +44,7 @@ let
   '';
 
   # A minimal Sway: no bar, no border, none of its own shortcuts. Super is the
-  # app's system key, the ThinkPad's keys of light and sound reach the app.
+  # app's system key, the X250's keys of light and sound reach the app.
   # One hidden combination opens a rescue terminal; it never starts with
   # Super, and the « locked » mode (the app's lock, phase 5.6) has none.
   swayConfig = pkgs.writeText "sway-charpentier.conf" ''

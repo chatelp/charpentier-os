@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tries the install key in a virtual machine shaped like the X250 (UEFI, a
 # blank SATA disk, the image plugged as a USB key, 4 Go of memory), on the
-# x86_64 Linux that builds it (the ThinkPad, under WSL2): KVM when /dev/kvm is
+# x86_64 Linux that builds it (the Yoga L13, under WSL2): KVM when /dev/kvm is
 # there, emulation otherwise (slow: half an hour for the copy).
 #
 #   scripts/try-installer.sh            # a blank disk, the newest image in dist/installer

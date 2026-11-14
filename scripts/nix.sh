@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs a Nix command for this repository, wherever it is built:
-# - on an x86_64 Linux with Nix (the ThinkPad, under WSL2): Nix itself;
+# - on an x86_64 Linux with Nix (the Yoga L13, under WSL2): Nix itself;
 # - on the Mac, which has no Nix: the official nixos/nix container under
 #   OrbStack (x86_64, through Rosetta), bounded (8 Go of memory, 6 processors).
 # Never on the prodesk2021: a production server.

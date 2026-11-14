@@ -6,7 +6,7 @@ L'app vit dans son propre dépôt, [`chatelp/charpentier`](https://github.com/ch
 
 ## Construire
 
-Sur une machine x86_64 sous Linux avec Nix (le ThinkPad, sous WSL2), `scripts/nix.sh` appelle Nix directement. Sur le Mac, qui n'a pas Nix, il le lance dans le conteneur officiel `nixos/nix` sous [OrbStack](https://orbstack.dev) (x86_64, par Rosetta : lent). Jamais sur le prodesk2021.
+Sur une machine x86_64 sous Linux avec Nix (le Yoga L13 de Pierre, sous WSL2), `scripts/nix.sh` appelle Nix directement. Sur le Mac, qui n'a pas Nix, il le lance dans le conteneur officiel `nixos/nix` sous [OrbStack](https://orbstack.dev) (x86_64, par Rosetta : lent). Jamais sur le prodesk2021.
 
 ```bash
 scripts/nix.sh build .#charpentier                        # le paquet de l'app
