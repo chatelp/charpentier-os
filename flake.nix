@@ -65,6 +65,28 @@
             modules = [ ./installer ];
           }).config.system.build.isoImage;
         default = self.packages.${system}.installer;
+        # The install key tried from end to end in a virtual machine, by OCR
+        # and the QEMU monitor (scripts/test-installer.py): here and in CI.
+        test-installer =
+          let
+            pkgs = nixpkgs.legacyPackages.${system};
+          in
+          pkgs.writeShellApplication {
+            name = "test-installer";
+            runtimeInputs = [
+              pkgs.python3
+              pkgs.imagemagick
+              # French only (and English, which Tesseract requires), not its 1 Go of languages.
+              (pkgs.tesseract.override {
+                enableLanguages = [
+                  "eng"
+                  "fra"
+                ];
+              })
+            ];
+            # From the repository's root: it reads dist/installer, writes dist/test-installer.
+            text = ''exec python3 scripts/test-installer.py "$@"'';
+          };
       };
     };
 }
