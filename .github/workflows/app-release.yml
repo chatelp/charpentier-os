@@ -1,0 +1,65 @@
+# A release of the app (vX.Y.Z, D-31, phase 5.11): the app's workflow sends a
+# repository_dispatch « app-release » with { tag, version, notes }. Here the
+# flake's input moves to that tag, the lock follows, and a pull request
+# « app vX.Y.Z » is opened, set to merge by itself once ci passes.
+#
+# With CHARPENTIER_OS_BOT_TOKEN, not GITHUB_TOKEN: what GITHUB_TOKEN pushes or
+# merges starts no other workflow, so neither ci on the pull request nor the
+# publication on main would run.
+name: app-release
+
+on:
+  repository_dispatch:
+    types: [app-release]
+
+permissions: {}
+
+concurrency:
+  group: app-release-${{ github.event.client_payload.tag }}
+
+jobs:
+  pull-request:
+    name: app ${{ github.event.client_payload.tag }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TAG: ${{ github.event.client_payload.tag }}
+      VERSION: ${{ github.event.client_payload.version }}
+      NOTES: ${{ github.event.client_payload.notes }}
+      GH_TOKEN: ${{ secrets.CHARPENTIER_OS_BOT_TOKEN }}
+    steps:
+      - name: A numbered version only
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ && "$TAG" = "v$VERSION" ]] ||
+            { echo "::error::tag « $TAG » / version « $VERSION »: vX.Y.Z expected"; exit 1; }
+
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.CHARPENTIER_OS_BOT_TOKEN }}
+
+      - uses: DeterminateSystems/nix-installer-action@v23
+
+      - name: The flake on the tag
+        run: |
+          sed -i -E "s#^(\s*charpentier\.url = )\"github:chatelp/charpentier[^\"]*\";#\1\"github:chatelp/charpentier/$TAG\";#" flake.nix
+          grep -q "charpentier.url = \"github:chatelp/charpentier/$TAG\";" flake.nix
+          nix flake lock
+          app=$(nix eval --raw .#charpentier.version)
+          [ "$app" = "$VERSION" ] || { echo "::error::the app at $TAG says $app, not $VERSION"; exit 1; }
+
+      - name: Pull request
+        run: |
+          branch="app/$TAG"
+          git config user.name 'charpentier-os'
+          git config user.email 'charpentier-os@users.noreply.github.com'
+          git switch -c "$branch"
+          git commit -am "build(nix): the app $TAG"
+          git push --force origin "$branch"
+          printf '%s\n' "$NOTES" >notes.md
+          if gh pr view "$branch" >/dev/null 2>&1; then
+            gh pr edit "$branch" --title "app $TAG" --body-file notes.md
+          else
+            gh pr create --base main --head "$branch" --title "app $TAG" --body-file notes.md
+          fi
+          # Merges itself when ci passes: main requires it, nothing else.
+          gh pr merge "$branch" --auto --merge
