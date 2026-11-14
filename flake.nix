@@ -14,6 +14,9 @@
     # `--override-input charpentier path:<the app's checkout>`.
     charpentier.url = "github:chatelp/charpentier";
     charpentier.inputs.nixpkgs.follows = "nixpkgs";
+    # The disk's layout for nixos-anywhere (development variant only).
+    disko.url = "github:nix-community/disko";
+    disko.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
@@ -22,6 +25,7 @@
       nixpkgs,
       nixos-hardware,
       charpentier,
+      disko,
       ...
     }:
     let
@@ -50,6 +54,8 @@
         (x250 keyboard).extendModules {
           modules = [
             ./hosts/x250/dev.nix
+            disko.nixosModules.disko
+            ./hosts/x250/disko.nix
             {
               charpentier.dev.authorizedKeys = lib.optionals (builtins.pathExists devKeys) (
                 lib.filter (l: l != "" && !lib.hasPrefix "#" l) (lib.splitString "\n" (builtins.readFile devKeys))
