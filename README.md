@@ -13,6 +13,7 @@ scripts/nix.sh build .#charpentier                        # le paquet de l'app
 scripts/nix.sh build .#nixosConfigurations.x250.config.system.build.toplevel
 scripts/nix.sh --out dist/installer build .#installer     # l'image de la clé
 scripts/try-installer.sh                                  # l'essayer en machine virtuelle (Linux, KVM)
+scripts/try-plymouth.sh start                             # l'écran du mot de passe du disque, dans une fenêtre (WSLg)
 scripts/flash-installer.sh                                # l'écrire sur une clé (depuis le Mac)
 scripts/nix.sh flake update charpentier                   # passer au dernier commit de l'app
 scripts/nix.sh --clean                                    # rendre le disque
@@ -26,8 +27,9 @@ Le cache Nix prend 10 à 15 Go au plus fort (le store, ou sur le Mac le volume D
 
 - `flake.nix` : `nixosConfigurations.x250`, `x250-bepo`, `x250-qwerty` (le clavier choisi à l'installation), `packages.installer` (l'ISO).
 - `hosts/x250/` : le système (démarrage, chiffrement LUKS, session, réseau, son, impression, autorisations) et `vm.nix` pour l'essayer en machine virtuelle.
+- `hosts/x250/plymouth/` : l'écran du mot de passe du disque (DESIGN §4.12 « Verrouillage »). Plymouth, dans l'initrd sous systemd, avec un thème `script` : systemd-cryptsetup lui demande le mot de passe, il dessine avec une vraie police (JetBrains Mono, licence OFL jointe) et lit le clavier de la console, donc la disposition choisie à l'installation. Sans lui, l'invite serait le texte anglais de systemd. `scripts/try-plymouth.sh` l'essaie dans une fenêtre, sans machine virtuelle.
 - `installer/` : l'image de la clé et `install.sh`, l'installateur en mode texte.
-- `scripts/` : `nix.sh` (construire), `try-installer.sh` (essayer la clé en machine virtuelle) et `flash-installer.sh` (écrire la clé depuis le Mac).
+- `scripts/` : `nix.sh` (construire), `try-installer.sh` (essayer la clé en machine virtuelle), `try-plymouth.sh` (l'écran du mot de passe, dans une fenêtre) et `flash-installer.sh` (écrire la clé depuis le Mac).
 
 ## Ce que l'app attend du système
 
