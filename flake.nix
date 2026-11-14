@@ -57,16 +57,21 @@
             }
           ];
         };
-      # An install key's image, for the given systems (one per keyboard).
+      # An install key's image, for the given systems (one per keyboard),
+      # named after them: charpentier-x250-<version>.iso, or -dev- for the
+      # development key, never mistaken for the other when written.
       installerOf =
-        systems:
+        name: systems:
         (nixpkgs.lib.nixosSystem {
           inherit system;
           specialArgs = {
             version = app.version;
             systems = nixpkgs.lib.mapAttrs (_: s: s.config.system.build.toplevel) systems;
           };
-          modules = [ ./installer ];
+          modules = [
+            ./installer
+            { image.baseName = lib.mkOverride 40 "${name}-${app.version}"; }
+          ];
         }).config.system.build.isoImage;
     in
     {
@@ -83,14 +88,14 @@
       packages.${system} = {
         charpentier = app;
         # The install key's image (phase 5.9 bis), written by scripts/flash-installer.sh.
-        installer = installerOf {
+        installer = installerOf "charpentier-x250" {
           azerty = self.nixosConfigurations.x250;
           bepo = self.nixosConfigurations.x250-bepo;
           qwerty = self.nixosConfigurations.x250-qwerty;
         };
         # The same key with the development variant: the first installation
         # of a development X250 (or VM), by hand; never published.
-        installer-dev = installerOf {
+        installer-dev = installerOf "charpentier-x250-dev" {
           azerty = self.nixosConfigurations.x250-dev;
           bepo = self.nixosConfigurations.x250-dev-bepo;
           qwerty = self.nixosConfigurations.x250-dev-qwerty;
