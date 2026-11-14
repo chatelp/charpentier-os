@@ -6,11 +6,13 @@
 # encrypts it with the author's password and copies the system already built
 # on the key. Nothing is downloaded.
 #
-# Given by the image (nix/installer/default.nix):
-#   CHARPENTIER_VERSION, CHARPENTIER_SYSTEMS (layout=/nix/store/…-toplevel,…),
-#   CHARPENTIER_KEY_LABEL (the key's label), CHARPENTIER_PLAIN (1 on the kernel's console).
-# Exit 10 asks the service to start again with the layout written in
-# /run/charpentier/layout (kmscon's keyboard is set when it starts).
+# Written ahead of this script by the image (installer/default.nix), since
+# kmscon gives its program an empty environment: CHARPENTIER_VERSION,
+# CHARPENTIER_SYSTEMS (layout=/nix/store/…-toplevel,…), CHARPENTIER_KEY_LABEL
+# (the key's label). From the service: CHARPENTIER_PLAIN (1 on the kernel's console).
+# kmscon's keyboard is set when it starts, and kmscon starts this script again
+# when it ends: a new layout, written in /run/charpentier/layout, restarts the
+# whole service.
 set -uo pipefail
 
 version=${CHARPENTIER_VERSION:-0.0.0}
@@ -159,9 +161,11 @@ welcome() {
         for i in 0 1 2; do [ "${layouts[$i]}" = "$layout" ] && break; done
         if [ "$k" = right ]; then i=$(((i + 1) % 3)); else i=$(((i + 2) % 3)); fi
         echo "${layouts[$i]}" >"$state/layout"
-        # kmscon takes its keyboard when it starts: start again with this one.
         [ "$plain" = 1 ] && loadkeys "$(console_map "${layouts[$i]}")" >/dev/null 2>&1 && layout=${layouts[$i]} && continue
-        exit 10
+        # kmscon takes its keyboard when it starts: start it again with this one.
+        systemctl restart --no-block charpentier-installer.service
+        sleep 10
+        exit 0
         ;;
       enter) [ "$ready" = 1 ] && return 0 ;;
       escape) power_off ;;

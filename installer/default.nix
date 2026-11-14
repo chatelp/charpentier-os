@@ -33,6 +33,7 @@ let
       kbd
       ncurses
       gawk
+      gnugrep
       gnused
       findutils
       coreutils
@@ -43,15 +44,20 @@ let
     bashOptions = [ ];
     # The author reads French: its apostrophe (’) is typographic, on purpose.
     excludeShellChecks = [ "SC1112" ];
-    text = builtins.readFile ./install.sh;
+    # kmscon starts the installer with an empty environment: what it needs is
+    # written ahead of it, the system's tools as a last resort.
+    text =
+      lib.concatStrings (lib.mapAttrsToList (k: v: "export ${k}=${lib.escapeShellArg v}\n") env)
+      + "export PATH=\"$PATH:/run/current-system/sw/bin\"\n"
+      + builtins.readFile ./install.sh;
   };
   env = {
     CHARPENTIER_VERSION = version;
     CHARPENTIER_KEY_LABEL = label;
     CHARPENTIER_SYSTEMS = lib.concatStringsSep "," (lib.mapAttrsToList (k: s: "${k}=${s}") systems);
   };
-  # kmscon takes its keyboard when it starts: the installer asks for a new
-  # start (exit 10) when the author changes it.
+  # kmscon takes its keyboard when it starts: the installer restarts the
+  # service when the author changes it.
   kmscon = pkgs.writeShellScript "charpentier-kmscon" ''
     layout=$(cat /run/charpentier/layout 2>/dev/null || echo azerty)
     case $layout in
@@ -132,13 +138,9 @@ in
       "systemd-vconsole-setup.service"
     ];
     onFailure = [ "charpentier-installer-plain.service" ];
-    environment = env;
     serviceConfig = {
       ExecStart = kmscon;
-      # 10: a new keyboard, start again with it.
       Restart = "on-failure";
-      RestartForceExitStatus = "10";
-      SuccessExitStatus = "10";
       RestartSec = 0;
     };
     unitConfig.StartLimitBurst = 50;
@@ -146,9 +148,7 @@ in
 
   systemd.services.charpentier-installer-plain = {
     description = "Installation de Charpentier (console du noyau)";
-    environment = env // {
-      CHARPENTIER_PLAIN = "1";
-    };
+    environment.CHARPENTIER_PLAIN = "1";
     serviceConfig = {
       ExecStart = lib.getExe installer;
       StandardInput = "tty";
