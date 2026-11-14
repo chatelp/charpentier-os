@@ -1,5 +1,26 @@
 {
   "nodes": {
+    "charpentier": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1794651465,
+        "narHash": "sha256-t04NqhhlRbHUGdjnzLoeRG+CLW5rF3u3OE6aM2wmMAg=",
+        "ref": "main",
+        "rev": "81b45e593d7e5bff54a91b28e87954d1d70c656e",
+        "revCount": 160,
+        "type": "git",
+        "url": "file:///src/charpentier-writer"
+      },
+      "original": {
+        "ref": "main",
+        "type": "git",
+        "url": "file:///src/charpentier-writer"
+      }
+    },
     "nixos-hardware": {
       "inputs": {
         "nixpkgs": [
@@ -20,12 +41,6 @@
         "type": "github"
       }
     },
-    "root": {
-      "inputs": {
-        "nixos-hardware": "nixos-hardware",
-        "nixpkgs": "nixpkgs"
-      }
-    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1794165970,
@@ -40,6 +55,13 @@
         "ref": "nixos-26.05",
         "repo": "nixpkgs",
         "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "charpentier": "charpentier",
+        "nixos-hardware": "nixos-hardware",
+        "nixpkgs": "nixpkgs"
       }
     }
   },
