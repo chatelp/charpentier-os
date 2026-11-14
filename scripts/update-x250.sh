@@ -24,7 +24,7 @@ host=${args[0]}
 target="auteur@$host"
 
 # shellcheck disable=SC2086 # NIX_SSHOPTS is a list of ssh options
-remote() { ssh $NIX_SSHOPTS -o BatchMode=yes "$target" "$@"; }
+remote() { ssh -n $NIX_SSHOPTS -o BatchMode=yes "$target" "$@"; }
 export NIX_SSHOPTS=${NIX_SSHOPTS:-}
 
 variant=$(remote cat /etc/charpentier/variant 2>/dev/null || true)
@@ -39,11 +39,11 @@ case "$keyboard" in
   *) echo "clavier inconnu sur $host : $keyboard" >&2; exit 1 ;;
 esac
 
-before=$(remote readlink /run/current-system)
+before=$(remote readlink -f /run/current-system)
 echo "$host : $config, $action"
 nix run --inputs-from . nixpkgs#nixos-rebuild -- "$action" \
   --flake ".#$config" --target-host "$target" --sudo --no-reexec
-after=$(remote readlink /nix/var/nix/profiles/system)
+after=$(remote readlink -f /nix/var/nix/profiles/system)
 if [ "$before" = "$after" ]; then
   echo "déjà à jour : $after"
 else
