@@ -44,7 +44,9 @@ if [ "$(uname -s)" = Linux ] && command -v nix >/dev/null; then
   if [ -n "$out" ]; then
     # The store's files are read-only: the copy is made writable, so the next
     # run (or the author) can replace it.
-    { chmod -R u+w "$out" 2>/dev/null; rm -rf "$out"; }
+    # (Under set -e: no copy yet on the first run, so chmod may fail.)
+    chmod -R u+w "$out" 2>/dev/null || true
+    rm -rf "$out"
     mkdir -p "$out"
     cp -rL result/. "$out/"
     chmod -R u+w "$out"
