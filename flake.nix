@@ -1,12 +1,18 @@
 {
-  # The X250, writing device (docs/PLAN.md phases 5.8 to 5.9 bis): the app's
-  # package, the NixOS system and the install key. Built on a Linux machine
-  # (scripts/nix-remote.sh): the Mac has no Nix.
-  description = "Charpentier : l'app et le système du X250";
+  # Charpentier as an installable system: the X250, writing device (phases 5.9
+  # and 5.9 bis of the app's docs/PLAN.md). The app comes from its own
+  # repository, pinned to a commit by flake.lock; its package is built there
+  # (nix/charpentier.nix). Built with scripts/nix.sh: the Mac has no Nix.
+  description = "Charpentier OS : le système du X250 et sa clé d'installation";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     nixos-hardware.url = "github:NixOS/nixos-hardware";
+    nixos-hardware.inputs.nixpkgs.follows = "nixpkgs";
+    # The app, as scripts/nix.sh mounts it in the container: its main branch,
+    # committed. Moving to a newer app: `scripts/nix.sh flake update charpentier`.
+    charpentier.url = "git+file:///src/charpentier-writer?ref=main";
+    charpentier.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
@@ -14,21 +20,22 @@
       self,
       nixpkgs,
       nixos-hardware,
+      charpentier,
       ...
     }:
     let
       system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
+      app = charpentier.packages.${system}.charpentier;
       # The X250's system, with the keyboard chosen at installation.
       x250 =
         keyboard:
         nixpkgs.lib.nixosSystem {
           inherit system;
-          specialArgs.charpentier = self.packages.${system}.charpentier;
+          specialArgs.charpentier = app;
           modules = [
             nixos-hardware.nixosModules.lenovo-thinkpad-x250
-            ./nix/hosts/x250
-            ./nix/hosts/x250/vm.nix
+            ./hosts/x250
+            ./hosts/x250/vm.nix
             { charpentier.keyboard = keyboard; }
           ];
         };
@@ -41,22 +48,22 @@
       };
 
       packages.${system} = {
-        charpentier = pkgs.callPackage ./nix/charpentier.nix { };
-        default = self.packages.${system}.charpentier;
+        charpentier = app;
         # The install key's image (phase 5.9 bis), written by scripts/flash-installer.sh.
         installer =
           (nixpkgs.lib.nixosSystem {
             inherit system;
             specialArgs = {
-              version = self.packages.${system}.charpentier.version;
+              version = app.version;
               systems = nixpkgs.lib.mapAttrs (_: s: s.config.system.build.toplevel) {
                 azerty = self.nixosConfigurations.x250;
                 bepo = self.nixosConfigurations.x250-bepo;
                 qwerty = self.nixosConfigurations.x250-qwerty;
               };
             };
-            modules = [ ./nix/installer ];
+            modules = [ ./installer ];
           }).config.system.build.isoImage;
+        default = self.packages.${system}.installer;
       };
     };
 }

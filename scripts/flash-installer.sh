@@ -5,8 +5,8 @@
 # erases it after ⏎ ⏎ (the second within 3 s), writes the image, reads it back
 # to check it, then ejects the key.
 #
-# The image comes from the Linux build machine:
-#   CHARPENTIER_BUILDER=prodesk2021.local scripts/nix-remote.sh --out dist/installer build .#installer
+# The image is built on this Mac (scripts/nix.sh, under OrbStack):
+#   scripts/nix.sh --out dist/installer build .#installer
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -23,12 +23,12 @@ go() { awk -v b="$1" 'BEGIN { printf "%.1f Go", b / 1e9 }' | tr . ,; }
 go_whole() { awk -v b="$1" 'BEGIN { printf "%d Go", (b / 1e9) + 0.5 }'; }
 mois=(janv. févr. mars avr. mai juin juil. août sept. oct. nov. déc.)
 
-image=$(ls -t dist/installer/*.iso dist/installer/*.img 2>/dev/null | head -1)
+image=$(ls -t dist/installer/*.iso dist/installer/*/*.iso dist/installer/*.img 2>/dev/null | head -1)
 say "${B}charpentier · clé d'installation du x250${R}"
 say ''
 if [ -z "$image" ]; then
   say "${I}pas d'image d'installation${R} · construisez-la d'abord :"
-  say "${D}  CHARPENTIER_BUILDER=prodesk2021.local scripts/nix-remote.sh --out dist/installer build .#installer${R}"
+  say "${D}  scripts/nix.sh --out dist/installer build .#installer${R}"
   exit 1
 fi
 size=$(stat -f %z "$image")
