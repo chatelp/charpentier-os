@@ -244,6 +244,8 @@ in
     documentation.enable = false;
     documentation.man.enable = false;
     services.xserver.enable = false;
+    # NixOS brings speech-dispatcher and its voices (700 Mo); the app never speaks.
+    services.speechd.enable = false;
     nix.settings.experimental-features = [
       "nix-command"
       "flakes"
