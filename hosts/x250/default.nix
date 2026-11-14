@@ -231,6 +231,8 @@ in
       swayidle
       wlsunset
       foot
+      # Whether the Wi-Fi card can be an access point (5.13): `iw list`.
+      iw
       charpentier
     ];
     # Without a password, for the author's session: the clock and the keys.
@@ -244,6 +246,18 @@ in
           return polkit.Result.YES;
         }
       });
+    '';
+
+    # The first start from the phone (phase 5.13): the app opens a temporary
+    # Wi-Fi (`nmcli device wifi hotspot`, NetworkManager's shared mode, its
+    # dnsmasq on 10.42.0.0/24) and serves its page on 10.42.0.1:8080. Open on
+    # the Wi-Fi only, to that network only: DHCP (whose first request comes
+    # from 0.0.0.0), DNS, and the page. Nothing listens there afterwards.
+    networking.firewall.extraCommands = ''
+      iptables -A nixos-fw -i wl+ -p udp --dport 67 -j nixos-fw-accept
+      iptables -A nixos-fw -i wl+ -s 10.42.0.0/24 -p udp --dport 53 -j nixos-fw-accept
+      iptables -A nixos-fw -i wl+ -s 10.42.0.0/24 -p tcp --dport 53 -j nixos-fw-accept
+      iptables -A nixos-fw -i wl+ -s 10.42.0.0/24 -p tcp --dport 8080 -j nixos-fw-accept
     '';
 
     # The batteries and the lid: TLP, sleep when the lid closes.
