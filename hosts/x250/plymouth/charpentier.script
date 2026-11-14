@@ -132,6 +132,20 @@ fun display_normal() {
   show_refused(0);
 }
 
+# ─── The update ───
+# A generation's first start after an update (phase 5.12): its boot entry
+# carries charpentier.maj=X.Y.Z, which an initrd unit sends here as the
+# status « maj:X.Y.Z » (hosts/x250/update). Any other status is not ours.
+global.update = Sprite();
+fun update_status(status) {
+  if (status.SubString(0, 4) != "maj:") return;
+  version = status.SubString(4, status.Length());
+  global.update.SetImage(text("mise à jour " + version, global.ink2_r, global.ink2_g, global.ink2_b));
+  place(global.update, global.left, 2);
+  global.update.SetOpacity(1);
+}
+Plymouth.SetUpdateStatusFunction(update_status);
+
 Plymouth.SetDisplayPasswordFunction(display_password);
 Plymouth.SetDisplayNormalFunction(display_normal);
 # Questions and messages (systemd's, in English) are not shown.
