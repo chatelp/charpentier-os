@@ -52,7 +52,10 @@ fi
 args=$(printf ' %q' "$@")
 copy=''
 if [ -n "$out" ]; then
-  copy=" && rm -rf /src/charpentier-os/$(printf '%q' "$out") && mkdir -p /src/charpentier-os/$(printf '%q' "$out") && cp -rL result/. /src/charpentier-os/$(printf '%q' "$out")/"
+  # The store's files are read-only: the copy is made writable, so the next
+  # run (or the author) can replace it.
+  dest=/src/charpentier-os/$(printf '%q' "$out")
+  copy=" && { chmod -R u+w $dest 2>/dev/null; rm -rf $dest; } && mkdir -p $dest && cp -rL result/. $dest/ && chmod -R u+w $dest"
 fi
 
 docker run --rm --platform linux/amd64 --memory=8g --memory-swap=8g --cpus=6 \
