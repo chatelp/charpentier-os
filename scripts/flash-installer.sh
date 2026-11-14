@@ -5,10 +5,16 @@
 # erases it after ⏎ ⏎ (the second within 3 s), writes the image, reads it back
 # to check it, then ejects the key.
 #
-# The image is built on this Mac (scripts/nix.sh, under OrbStack):
+# The image is the latest published one (phase 5.11), downloaded from the sync
+# server into dist/installer, resumed if cut, its SHA-256 checked; it needs a
+# token of the account (a device's, or the CI's) in CHARPENTIER_TOKEN:
+#   CHARPENTIER_TOKEN=… scripts/flash-installer.sh
+# or, with --local, the newest image built here:
 #   scripts/nix.sh --out dist/installer build .#installer
+#   scripts/flash-installer.sh --local
 set -uo pipefail
 cd "$(dirname "$0")/.."
+server=${CHARPENTIER_SERVER:-https://charpentier.chatel.pm}
 
 # ─── Look: no colour; bold, dim, inverse; plain text off a terminal or with NO_COLOR ───
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -23,13 +29,58 @@ go() { awk -v b="$1" 'BEGIN { printf "%.1f Go", b / 1e9 }' | tr . ,; }
 go_whole() { awk -v b="$1" 'BEGIN { printf "%d Go", (b / 1e9) + 0.5 }'; }
 mois=(janv. févr. mars avr. mai juin juil. août sept. oct. nov. déc.)
 
-image=$(ls -t dist/installer/*.iso dist/installer/*/*.iso dist/installer/*.img 2>/dev/null | head -1)
 say "${B}charpentier · clé d'installation du x250${R}"
 say ''
-if [ -z "$image" ]; then
-  say "${I}pas d'image d'installation${R} · construisez-la d'abord :"
-  say "${D}  scripts/nix.sh --out dist/installer build .#installer${R}"
-  exit 1
+
+# The latest published image: its version, size and sum, then the file, kept
+# in dist/installer/published and resumed if a download was cut.
+download() {
+  local auth meta version sha bytes
+  if [ -z "${CHARPENTIER_TOKEN:-}" ]; then
+    say "${I}pas de jeton${R} · l'image se télécharge avec un jeton du compte :"
+    say "${D}  CHARPENTIER_TOKEN=… scripts/flash-installer.sh${R}"
+    say "${D}ou, avec une image construite ici : scripts/flash-installer.sh --local${R}"
+    exit 1
+  fi
+  auth=(-H "Authorization: Bearer $CHARPENTIER_TOKEN")
+  meta=$(curl -fsS "${auth[@]}" "$server/api/installer/latest") || {
+    say "${I}le serveur ne donne pas d'image${R} · aucune publiée, ou jeton refusé"
+    exit 1
+  }
+  field() { plutil -extract "$1" raw -o - - <<<"$meta" 2>/dev/null || sed -n "s/.*\"$1\": *\"\\{0,1\\}\\([^\",}]*\\).*/\\1/p" <<<"$meta"; }
+  version=$(field version)
+  sha=$(field sha256)
+  bytes=$(field size)
+  mkdir -p dist/installer/published
+  image=dist/installer/published/charpentier-x250-$version.iso
+  # Whole but wrong (a disk error, an older file): from the start, not resumed.
+  if [ -f "$image" ] && [ "$(wc -c <"$image")" -ge "$bytes" ] &&
+    [ "$(shasum -a 256 "$image" | cut -d' ' -f1)" != "$sha" ]; then
+    rm -f "$image"
+  fi
+  if [ ! -f "$image" ] || [ "$(shasum -a 256 "$image" | cut -d' ' -f1)" != "$sha" ]; then
+    say "téléchargement de l'image $version"
+    curl -f -C - --retry 5 --progress-bar "${auth[@]}" -o "$image" "$server/api/installer/$version.iso" || {
+      say "${I}téléchargement interrompu${R} · relancez : il reprendra où il s'est arrêté"
+      exit 1
+    }
+    if [ "$(shasum -a 256 "$image" | cut -d' ' -f1)" != "$sha" ]; then
+      rm -f "$image"
+      say "${I}l'image téléchargée est abîmée${R} · relancez pour la télécharger à nouveau"
+      exit 1
+    fi
+  fi
+}
+
+if [ "${1:-}" = '--local' ]; then
+  image=$(ls -t dist/installer/*.iso dist/installer/iso/*.iso dist/installer/*.img 2>/dev/null | head -1)
+  if [ -z "$image" ]; then
+    say "${I}pas d'image d'installation${R} · construisez-la d'abord :"
+    say "${D}  scripts/nix.sh --out dist/installer build .#installer${R}"
+    exit 1
+  fi
+else
+  download
 fi
 size=$(stat -f %z "$image")
 need=$(((size + 999999999) / 1000000000))
