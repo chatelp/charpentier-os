@@ -15,7 +15,8 @@ scripts/nix.sh --out dist/installer build .#installer     # l'image de la clé
 scripts/try-installer.sh                                  # l'essayer en machine virtuelle (Linux, KVM)
 scripts/try-plymouth.sh start                             # l'écran du mot de passe du disque, dans une fenêtre (WSLg)
 nix run .#test-installer                                  # la clé essayée seule de bout en bout, sans fenêtre (OCR)
-scripts/flash-installer.sh                                # l'écrire sur une clé (depuis le Mac)
+CHARPENTIER_TOKEN=… scripts/flash-installer.sh          # écrire la dernière image publiée sur une clé (depuis le Mac)
+scripts/flash-installer.sh --local                        # ou celle construite ici
 scripts/nix.sh flake update charpentier                   # passer au dernier commit de l'app
 scripts/nix.sh --clean                                    # rendre le disque
 ```
@@ -32,7 +33,7 @@ Le X250 ne reçoit que des versions numérotées (D-31, phase 5.11 du plan de l'
 
 1. Une release `vX.Y.Z` de l'app envoie ici un `repository_dispatch` `app-release`. `.github/workflows/app-release.yml` fait viser ce tag à l'entrée `charpentier` du flake, relance `nix flake lock` et ouvre la pull request « app vX.Y.Z », réglée pour se fusionner seule.
 2. `.github/workflows/ci.yml`, sur chaque pull request : les trois systèmes, la clé, puis `nix run .#test-installer` en machine virtuelle avec KVM. C'est le seul accord que main demande.
-3. `.github/workflows/publish.yml`, quand la pull request arrive sur main : les trois systèmes copiés, signés, dans le cache du serveur de synchronisation (`https://charpentier.chatel.pm/nix-cache`), puis le pointeur `/api/updates/latest` (version, notes, systèmes). Un changement du seul système part par une release de ce dépôt, taguée `X.Y.Z-N` (la version de l'app, puis celle du système) ; les autres commits sur main ne partent pas.
+3. `.github/workflows/publish.yml`, quand la pull request arrive sur main : les trois systèmes copiés, signés, dans le cache du serveur de synchronisation (`https://charpentier.chatel.pm/nix-cache`), puis le pointeur `/api/updates/latest` (version, notes, systèmes), puis, à part, l'image de la clé (`/api/installer/<version>`, que `scripts/flash-installer.sh` télécharge). Cloudflare, devant le serveur, refuse toute requête de plus de 100 Mo : `scripts/publish.py` n'envoie que les chemins qui manquent au cache, et en morceaux de 95 Mio au plus (en-têtes `X-Part` et `X-Checksum-SHA256`) ; les NAR partent avant leurs `.narinfo`. Un changement du seul système part par une release de ce dépôt, taguée `X.Y.Z-N` (la version de l'app, puis celle du système) ; les autres commits sur main ne partent pas.
 
 À régler une fois, dans GitHub, par Pierre :
 
@@ -49,7 +50,7 @@ Le X250 ne reçoit que des versions numérotées (D-31, phase 5.11 du plan de l'
 - `hosts/x250/` : le système (démarrage, chiffrement LUKS, session, réseau, son, impression, autorisations) et `vm.nix` pour l'essayer en machine virtuelle.
 - `hosts/x250/plymouth/` : l'écran du mot de passe du disque (DESIGN §4.12 « Verrouillage »). Plymouth, dans l'initrd sous systemd, avec un thème `script` : systemd-cryptsetup lui demande le mot de passe, il dessine avec une vraie police (JetBrains Mono, licence OFL jointe) et lit le clavier de la console, donc la disposition choisie à l'installation. Sans lui, l'invite serait le texte anglais de systemd. `scripts/try-plymouth.sh` l'essaie dans une fenêtre, sans machine virtuelle.
 - `installer/` : l'image de la clé et `install.sh`, l'installateur en mode texte.
-- `scripts/` : `nix.sh` (construire), `try-installer.sh` (essayer la clé en machine virtuelle), `test-installer.py` (l'essayer seule, `nix run .#test-installer`), `try-plymouth.sh` (l'écran du mot de passe, dans une fenêtre) et `flash-installer.sh` (écrire la clé depuis le Mac).
+- `scripts/` : `nix.sh` (construire), `try-installer.sh` (essayer la clé en machine virtuelle), `test-installer.py` (l'essayer seule, `nix run .#test-installer`), `try-plymouth.sh` (l'écran du mot de passe, dans une fenêtre), `publish.py` (envoyer au serveur, en morceaux) et `flash-installer.sh` (écrire la clé depuis le Mac, l'image publiée ou `--local`).
 - `.github/workflows/` : `app-release.yml`, `ci.yml` et `publish.yml`, les mises à jour du X250.
 
 ## Ce que l'app attend du système
