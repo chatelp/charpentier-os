@@ -1,0 +1,141 @@
+# The disk's password screen (docs/DESIGN.md §4.12 « Verrouillage », rendered
+# in docs/design/x250/11-disque-maj.png of the app): drawn by the system, in
+# Plymouth, before the app exists. A block of three lines in fixed pitch, at
+# the centre of the screen, left-aligned within the block:
+#   charpentier · x250                  faint
+#   mise à jour 0.6.0                   ink 2, only while a version installs (5.11)
+#   mot de passe du disque : •••••█     ink 2, one dot per character, a block cursor
+# A wrong password empties the line, and says so on an inverted line below.
+# Nothing else: no logo, no progress, no text while shutting down.
+
+# ─── The palette (the app's dark theme), as fractions ───
+# In decimal: Plymouth's script reads no hexadecimal (0x14 is 0, then x14).
+global.bg_r = 20 / 255; global.bg_g = 22 / 255; global.bg_b = 26 / 255;        # #14161a
+global.faint_r = 85 / 255; global.faint_g = 91 / 255; global.faint_b = 102 / 255; # #555b66
+global.ink2_r = 185 / 255; global.ink2_g = 192 / 255; global.ink2_b = 202 / 255;  # #b9c0ca
+global.ink_r = 223 / 255; global.ink_g = 227 / 255; global.ink_b = 234 / 255;     # #dfe3ea
+
+Window.SetBackgroundTopColor(global.bg_r, global.bg_g, global.bg_b);
+Window.SetBackgroundBottomColor(global.bg_r, global.bg_g, global.bg_b);
+
+# ─── The measures: 13 px at 125 % on the X250's 1920 × 1080 ───
+# The design is drawn at 1536 × 864 (the X250's screen at 80 %): one design
+# pixel is height / 864 screen pixels, never less than one.
+global.scale = Window.GetHeight() / 864;
+if (global.scale < 1) global.scale = 1;
+global.size = 13 * global.scale;
+global.font = "JetBrains Mono " + global.size + "px";
+# One line every two bodies, as in the design.
+global.pitch = Math.Int(2 * global.size + 0.5);
+
+fun text(s, r, g, b) {
+  return Image.Text(s, r, g, b, 1, global.font);
+}
+
+# The block is 53 columns wide (the prompt, 25, and room for 28 dots),
+# centred; the middle line sits on the screen's centre.
+global.column = text("0000000000", global.ink2_r, global.ink2_g, global.ink2_b).GetWidth() / 10;
+global.left = Window.GetX() + Math.Int((Window.GetWidth() - 53 * global.column) / 2);
+global.line_height = text("charpentier", global.ink2_r, global.ink2_g, global.ink2_b).GetHeight();
+global.middle = Window.GetY() + Math.Int((Window.GetHeight() - global.line_height) / 2);
+
+fun line_y(n) {
+  # n: 1, 2 or 3, the lines of the block.
+  return global.middle + (n - 2) * global.pitch;
+}
+
+fun place(sprite, x, n) {
+  sprite.SetX(x);
+  sprite.SetY(line_y(n));
+  sprite.SetZ(10);
+  return sprite;
+}
+
+# ─── The lines ───
+global.name = place(Sprite(text("charpentier · x250", global.faint_r, global.faint_g, global.faint_b)), global.left, 1);
+global.name.SetOpacity(0);
+
+global.label_image = text("mot de passe du disque : ", global.ink2_r, global.ink2_g, global.ink2_b);
+global.label = place(Sprite(global.label_image), global.left, 3);
+global.label.SetOpacity(0);
+global.dots_x = global.left + global.label_image.GetWidth();
+global.dots = place(Sprite(), global.dots_x, 3);
+global.cursor_image = text("█", global.ink2_r, global.ink2_g, global.ink2_b);
+global.cursor = place(Sprite(global.cursor_image), global.dots_x, 3);
+global.cursor.SetOpacity(0);
+
+# « mot de passe refusé », inverted: ink ground, the background's colour as text,
+# one column of margin on each side.
+global.refused_text = text("mot de passe refusé", global.bg_r, global.bg_g, global.bg_b);
+global.refused = Sprite();
+global.refused_ground = Sprite();
+fun build_refused() {
+  w = global.refused_text.GetWidth() + 2 * global.column;
+  h = global.refused_text.GetHeight();
+  # A one-pixel ink image, stretched: the inverted line's ground.
+  global.refused_ground.SetImage(global.ink_pixel.Scale(w, h));
+  global.refused_ground.SetX(global.left);
+  global.refused_ground.SetY(line_y(3) + global.pitch);
+  global.refused_ground.SetZ(10);
+  global.refused.SetImage(global.refused_text);
+  global.refused.SetX(global.left + global.column);
+  global.refused.SetY(line_y(3) + global.pitch);
+  global.refused.SetZ(11);
+}
+global.ink_pixel = Image("ink.png");
+build_refused();
+
+fun show_refused(on) {
+  if (on) opacity = 1; else opacity = 0;
+  global.refused.SetOpacity(opacity);
+  global.refused_ground.SetOpacity(opacity);
+}
+show_refused(0);
+
+# ─── The password ───
+# Plymouth calls display_password for every key (bullets: the characters
+# typed so far), and display_normal once the password is sent. A new prompt
+# after one was sent means the previous password was wrong.
+global.asked = 0;
+global.sent = 0;
+
+fun display_password(prompt, bullets) {
+  if (global.sent) {
+    show_refused(1);
+    global.sent = 0;
+  }
+  if (bullets > 0) show_refused(0);
+  global.asked = 1;
+  global.name.SetOpacity(1);
+  global.label.SetOpacity(1);
+  s = "";
+  for (i = 0; i < bullets && i < 28; i++) s += "•";
+  if (bullets > 0) {
+    image = text(s, global.ink2_r, global.ink2_g, global.ink2_b);
+    global.dots.SetImage(image);
+    global.dots.SetOpacity(1);
+    global.cursor.SetX(global.dots_x + image.GetWidth());
+  } else {
+    global.dots.SetOpacity(0);
+    global.cursor.SetX(global.dots_x);
+  }
+  global.cursor.SetOpacity(1);
+}
+
+fun display_normal() {
+  # The password is being checked, or the disk is open: the prompt goes, the
+  # name stays until the app takes the screen.
+  if (global.asked) global.sent = 1;
+  global.label.SetOpacity(0);
+  global.dots.SetOpacity(0);
+  global.cursor.SetOpacity(0);
+  show_refused(0);
+}
+
+Plymouth.SetDisplayPasswordFunction(display_password);
+Plymouth.SetDisplayNormalFunction(display_normal);
+# Questions and messages (systemd's, in English) are not shown.
+fun ignore() { }
+Plymouth.SetDisplayQuestionFunction(ignore);
+Plymouth.SetDisplayPromptFunction(ignore);
+Plymouth.SetDisplayMessageFunction(ignore);

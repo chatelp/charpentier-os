@@ -79,6 +79,9 @@ let
   };
 in
 {
+  # The disk's password screen.
+  imports = [ ./plymouth ];
+
   options.charpentier.keyboard = lib.mkOption {
     type = lib.types.enum [
       "azerty"
@@ -113,7 +116,9 @@ in
       "systemd.show_status=false"
       "vt.global_cursor_default=0"
     ];
-    # The disk's password (D-25): on #14161a, in fixed pitch.
+    # The console, behind Plymouth (./plymouth draws the disk's password, D-25):
+    # its keyboard is the one the password is typed on; its colours and font
+    # are what is left if Plymouth ever fails, on #14161a, in fixed pitch.
     console = {
       earlySetup = true;
       keyMap = layout.console;
