@@ -18,7 +18,7 @@ scripts/nix.sh flake update charpentier                   # passer au dernier co
 scripts/nix.sh --clean                                    # rendre le disque
 ```
 
-Le cache Nix prend 10 à 15 Go au plus fort (le store, ou sur le Mac le volume Docker `charpentier-nix`). `--clean` le vide ; la construction suivante le retélécharge. Seule la branche `main` de l'app, poussée sur GitHub, est prise : pour essayer une app pas encore poussée, `--override-input charpentier path:../charpentier-writer` (les deux dépôts voisins).
+Le cache Nix prend 10 à 15 Go au plus fort (le store, ou sur le Mac le volume Docker `charpentier-nix`). `--clean` le vide ; la construction suivante le retélécharge. Seule la branche `main` de l'app, poussée sur GitHub, est prise : pour essayer une app pas encore poussée, `--override-input charpentier path:<chemin de l'app>` (par exemple `path:../charpentier-writer`, si elle est clonée à côté).
 
 `scripts/try-installer.sh` démarre l'image dans une machine virtuelle à la façon du X250 (UEFI, disque SATA vierge, la clé en USB, 4 Go), avec KVM si `/dev/kvm` est là ; `--disk` redémarre ensuite sur le disque installé. Ne jamais démarrer la clé sur la machine qui construit : elle effacerait son disque.
 

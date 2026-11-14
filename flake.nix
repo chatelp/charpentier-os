@@ -11,7 +11,7 @@
     nixos-hardware.inputs.nixpkgs.follows = "nixpkgs";
     # The app: its main branch, pushed to GitHub. Moving to a newer app:
     # `scripts/nix.sh flake update charpentier`; an app not pushed yet:
-    # `--override-input charpentier path:../charpentier-writer`.
+    # `--override-input charpentier path:<the app's checkout>`.
     charpentier.url = "github:chatelp/charpentier";
     charpentier.inputs.nixpkgs.follows = "nixpkgs";
   };
