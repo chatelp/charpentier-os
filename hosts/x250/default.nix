@@ -85,7 +85,10 @@ let
 in
 {
   # The disk's password screen.
-  imports = [ ./plymouth ];
+  imports = [
+    ./plymouth
+    ./update
+  ];
 
   options.charpentier.keyboard = lib.mkOption {
     type = lib.types.enum [
