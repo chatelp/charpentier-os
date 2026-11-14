@@ -24,6 +24,9 @@ app=$(cd "${CHARPENTIER_APP:-../charpentier-writer}" && pwd)
 image=nixos/nix:latest
 volume=charpentier-nix
 
+# OrbStack puts docker in ~/.orbstack/bin, on the PATH of shells opened after
+# its first launch only.
+command -v docker >/dev/null || PATH="$HOME/.orbstack/bin:$PATH"
 command -v docker >/dev/null || {
   echo 'docker introuvable : installez OrbStack (brew install orbstack), puis lancez-le' >&2
   exit 1
