@@ -9,9 +9,10 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     nixos-hardware.url = "github:NixOS/nixos-hardware";
     nixos-hardware.inputs.nixpkgs.follows = "nixpkgs";
-    # The app, as scripts/nix.sh mounts it in the container: its main branch,
-    # committed. Moving to a newer app: `scripts/nix.sh flake update charpentier`.
-    charpentier.url = "git+file:///src/charpentier-writer?ref=main";
+    # The app: its main branch, pushed to GitHub. Moving to a newer app:
+    # `scripts/nix.sh flake update charpentier`; an app not pushed yet:
+    # `--override-input charpentier path:../charpentier-writer`.
+    charpentier.url = "github:chatelp/charpentier";
     charpentier.inputs.nixpkgs.follows = "nixpkgs";
   };
 
