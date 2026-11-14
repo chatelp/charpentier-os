@@ -6,6 +6,7 @@
 #
 #   scripts/try-installer.sh            # a blank disk, the newest image in dist/installer
 #   scripts/try-installer.sh --disk     # start again on the installed disk, key out
+#   scripts/try-installer.sh -- -display none   # QEMU options after --, here no window
 #
 # The machine's monitor listens on 127.0.0.1:45454 (QEMU's human monitor), to
 # type on it or take screenshots from a script:
@@ -22,8 +23,15 @@ mkdir -p "$vm"
 qemu=$(nix --extra-experimental-features 'nix-command flakes' build --inputs-from . --no-link --print-out-paths nixpkgs#qemu)
 ovmf=$(nix --extra-experimental-features 'nix-command flakes' build --inputs-from . --no-link --print-out-paths nixpkgs#OVMF.fd)
 
+disk_only=0
+if [ "${1:-}" = '--disk' ]; then
+  disk_only=1
+  shift
+fi
+[ "${1:-}" = '--' ] && shift
+
 key=()
-if [ "${1:-}" != '--disk' ]; then
+if [ "$disk_only" = 0 ]; then
   image=$(ls -t dist/installer/iso/*.iso 2>/dev/null | head -1)
   [ -n "$image" ] || { echo "pas d'image : scripts/nix.sh --out dist/installer build .#installer" >&2; exit 1; }
   rm -f "$vm/disk.qcow2"
@@ -47,4 +55,5 @@ exec "$qemu/bin/qemu-system-x86_64" -machine q35 -accel "$accel" -cpu "$cpu" -sm
   ${key[@]+"${key[@]}"} \
   -drive "if=none,id=disk,format=qcow2,file=$vm/disk.qcow2" -device ide-hd,drive=disk,bus=ide.0 \
   -device virtio-vga -nic none \
-  -monitor tcp:127.0.0.1:45454,server,nowait
+  -monitor tcp:127.0.0.1:45454,server,nowait \
+  "$@"
