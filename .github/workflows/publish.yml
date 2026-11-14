@@ -28,6 +28,9 @@ jobs:
     name: cache et pointeur
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    outputs:
+      publish: ${{ steps.version.outputs.publish }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -89,14 +92,14 @@ jobs:
         env:
           NIX_SIGNING_KEY: ${{ secrets.NIX_SIGNING_KEY }}
           CACHE_TOKEN: ${{ secrets.CHARPENTIER_CACHE_TOKEN }}
+        # Cloudflare refuses bodies above 100 Mo: scripts/publish.py sends the
+        # missing paths, signed, in parts of 95 MiB.
         run: |
           umask 077
           printf '%s' "$NIX_SIGNING_KEY" >"$RUNNER_TEMP/signing-key"
-          printf 'machine charpentier.chatel.pm login ci password %s\n' "$CACHE_TOKEN" >"$RUNNER_TEMP/netrc"
           mapfile -t systems < <(cat system-azerty system-bepo system-qwerty)
-          nix copy --option netrc-file "$RUNNER_TEMP/netrc" \
-            --to "$SERVER/nix-cache?compression=zstd&secret-key=$RUNNER_TEMP/signing-key" \
-            "${systems[@]}"
+          CHARPENTIER_CACHE_TOKEN=$CACHE_TOKEN NIX_SIGNING_KEY_FILE=$RUNNER_TEMP/signing-key \
+            python3 scripts/publish.py cache "${systems[@]}"
 
       - name: The pointer
         if: steps.version.outputs.publish == 'true'
@@ -110,3 +113,47 @@ jobs:
           cat pointer.json
           curl --fail-with-body --silent --show-error -X PUT "$SERVER/api/updates/latest" \
             -H "Authorization: Bearer $CACHE_TOKEN" -H 'Content-Type: application/json' --data @pointer.json
+
+  # The install key's image, for a new key (scripts/flash-installer.sh): after
+  # the pointer, apart, so that a failure here never holds back the X250.
+  installer:
+    name: image de la clé
+    needs: publish
+    if: needs.publish.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/local/share/powershell
+          df -h /
+
+      - uses: DeterminateSystems/nix-installer-action@v23
+
+      # The systems just published come back from the cache, not rebuilt.
+      - name: The cache, read
+        env:
+          NIX_SIGNING_KEY: ${{ secrets.NIX_SIGNING_KEY }}
+          CACHE_TOKEN: ${{ secrets.CHARPENTIER_CACHE_TOKEN }}
+        run: |
+          umask 077
+          printf '%s' "$NIX_SIGNING_KEY" >"$RUNNER_TEMP/signing-key"
+          public=$(nix key convert-secret-to-public <"$RUNNER_TEMP/signing-key")
+          printf 'machine charpentier.chatel.pm login ci password %s\n' "$CACHE_TOKEN" | sudo tee /etc/nix/netrc >/dev/null
+          printf 'extra-substituters = %s/nix-cache\nextra-trusted-public-keys = %s\nnetrc-file = /etc/nix/netrc\n' "$SERVER" "$public" |
+            sudo tee -a /etc/nix/nix.conf >/dev/null
+          sudo systemctl restart nix-daemon 2>/dev/null || sudo systemctl restart determinate-nixd 2>/dev/null || true
+
+      - name: Image
+        run: scripts/nix.sh --out dist/installer build --print-build-logs .#installer
+
+      - name: Onto the server
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+          CHARPENTIER_CACHE_TOKEN: ${{ secrets.CHARPENTIER_CACHE_TOKEN }}
+        run: |
+          image=$(ls dist/installer/iso/*.iso)
+          python3 scripts/publish.py file "api/installer/$VERSION" "$image"
