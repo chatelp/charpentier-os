@@ -14,6 +14,7 @@ scripts/nix.sh build .#nixosConfigurations.x250.config.system.build.toplevel
 scripts/nix.sh --out dist/installer build .#installer     # l'image de la clé
 scripts/try-installer.sh                                  # l'essayer en machine virtuelle (Linux, KVM)
 scripts/try-plymouth.sh start                             # l'écran du mot de passe du disque, dans une fenêtre (WSLg)
+nix run .#test-installer                                  # la clé essayée seule de bout en bout, sans fenêtre (OCR)
 scripts/flash-installer.sh                                # l'écrire sur une clé (depuis le Mac)
 scripts/nix.sh flake update charpentier                   # passer au dernier commit de l'app
 scripts/nix.sh --clean                                    # rendre le disque
@@ -23,13 +24,33 @@ Le cache Nix prend 10 à 15 Go au plus fort (le store, ou sur le Mac le volume D
 
 `scripts/try-installer.sh` démarre l'image dans une machine virtuelle à la façon du X250 (UEFI, disque SATA vierge, la clé en USB, 4 Go), avec KVM si `/dev/kvm` est là ; `--disk` redémarre ensuite sur le disque installé. Ne jamais démarrer la clé sur la machine qui construit : elle effacerait son disque.
 
+`nix run .#test-installer` fait la même chose sans personne au clavier : il lit l'écran par OCR et tape par le moniteur de QEMU (clavier azerty, disque effacé, mot de passe, copie, clé retirée, redémarrage, un mot de passe faux refusé puis le bon, l'écran « Bienvenue » de l'app). Les captures de chaque étape restent dans `dist/test-installer`. C'est l'essai que la CI fait sur chaque pull request.
+
+## Mises à jour du X250
+
+Le X250 ne reçoit que des versions numérotées (D-31, phase 5.11 du plan de l'app) :
+
+1. Une release `vX.Y.Z` de l'app envoie ici un `repository_dispatch` `app-release`. `.github/workflows/app-release.yml` fait viser ce tag à l'entrée `charpentier` du flake, relance `nix flake lock` et ouvre la pull request « app vX.Y.Z », réglée pour se fusionner seule.
+2. `.github/workflows/ci.yml`, sur chaque pull request : les trois systèmes, la clé, puis `nix run .#test-installer` en machine virtuelle avec KVM. C'est le seul accord que main demande.
+3. `.github/workflows/publish.yml`, quand la pull request arrive sur main : les trois systèmes copiés, signés, dans le cache du serveur de synchronisation (`https://charpentier.chatel.pm/nix-cache`), puis le pointeur `/api/updates/latest` (version, notes, systèmes). Un changement du seul système part par une release de ce dépôt, taguée `X.Y.Z-N` (la version de l'app, puis celle du système) ; les autres commits sur main ne partent pas.
+
+À régler une fois, dans GitHub, par Pierre :
+
+- Secrets de ce dépôt :
+  - `CHARPENTIER_OS_BOT_TOKEN` : un jeton fin limité à `chatelp/charpentier-os`, droits Contents et Pull requests en écriture. `GITHUB_TOKEN` ne suffit pas : ce qu'il pousse ou fusionne ne déclenche ni la CI de la pull request ni la publication.
+  - `CHARPENTIER_CACHE_TOKEN` : le jeton de la CI sur le serveur (`docker compose exec server node main.js create-ci-token github-actions`).
+  - `NIX_SIGNING_KEY` : la clé secrète de signature (`nix key generate-secret --key-name charpentier-x250-1`) ; sa clé publique (`nix key convert-secret-to-public`) ira dans `hosts/x250` à la phase 5.12.
+- Réglages : « Allow auto-merge » ; une règle sur main qui demande une pull request et le check « systèmes, clé et essai en VM », sans approbation.
+- Dans l'app : le jeton `CHARPENTIER_OS_DISPATCH` qui envoie le `repository_dispatch`.
+
 ## Contenu
 
 - `flake.nix` : `nixosConfigurations.x250`, `x250-bepo`, `x250-qwerty` (le clavier choisi à l'installation), `packages.installer` (l'ISO).
 - `hosts/x250/` : le système (démarrage, chiffrement LUKS, session, réseau, son, impression, autorisations) et `vm.nix` pour l'essayer en machine virtuelle.
 - `hosts/x250/plymouth/` : l'écran du mot de passe du disque (DESIGN §4.12 « Verrouillage »). Plymouth, dans l'initrd sous systemd, avec un thème `script` : systemd-cryptsetup lui demande le mot de passe, il dessine avec une vraie police (JetBrains Mono, licence OFL jointe) et lit le clavier de la console, donc la disposition choisie à l'installation. Sans lui, l'invite serait le texte anglais de systemd. `scripts/try-plymouth.sh` l'essaie dans une fenêtre, sans machine virtuelle.
 - `installer/` : l'image de la clé et `install.sh`, l'installateur en mode texte.
-- `scripts/` : `nix.sh` (construire), `try-installer.sh` (essayer la clé en machine virtuelle), `try-plymouth.sh` (l'écran du mot de passe, dans une fenêtre) et `flash-installer.sh` (écrire la clé depuis le Mac).
+- `scripts/` : `nix.sh` (construire), `try-installer.sh` (essayer la clé en machine virtuelle), `test-installer.py` (l'essayer seule, `nix run .#test-installer`), `try-plymouth.sh` (l'écran du mot de passe, dans une fenêtre) et `flash-installer.sh` (écrire la clé depuis le Mac).
+- `.github/workflows/` : `app-release.yml`, `ci.yml` et `publish.yml`, les mises à jour du X250.
 
 ## Ce que l'app attend du système
 
