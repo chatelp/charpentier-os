@@ -44,13 +44,21 @@ Le X250 ne reçoit que des versions numérotées (D-31, phase 5.11 du plan de l'
 - Réglages : « Allow auto-merge » ; une règle sur main qui demande une pull request et le check « systèmes, clé et essai en VM », sans approbation.
 - Dans l'app : le jeton `CHARPENTIER_OS_DISPATCH` qui envoie le `repository_dispatch`.
 
-## Contenu
+## Version développement du X250
 
-- `flake.nix` : `nixosConfigurations.x250`, `x250-bepo`, `x250-qwerty` (le clavier choisi à l'installation), `packages.installer` (l'ISO).
+Pour les essais depuis le Yoga L13 (phases 5.10 et 5.10 bis du plan) : le système d'écriture, plus un accès SSH **par clé seulement**, en tant qu'`auteur`, **depuis le réseau de la maison seulement** (port 22 ouvert aux seules adresses privées, IPv6 de lien local et ULA ; pas de Tailscale), et le mode d'essai de l'app (`CHARPENTIER_TEST_PORT=9222`, sur 127.0.0.1, joint par un tunnel SSH). Elle porte le marqueur `/etc/charpentier/variant` (`developpement`) et le tag `developpement` au menu de démarrage ; le service de mise à jour (5.12) n'installe rien sur elle et refuse de l'installer ailleurs. La version d'écriture n'ouvre aucun port.
+
+- Les clés admises : `hosts/x250/dev-keys.pub`, une par ligne (celle du Yoga L13). Sans elle, la version développement ne se construit pas.
+- Première installation, à la main : `scripts/nix.sh --out dist/installer-dev build .#installer-dev`, puis la clé (ou, pour la VM, `CHARPENTIER_VM=dist/vm-dev CHARPENTIER_IMAGES=dist/installer-dev scripts/try-installer.sh`).
+- Mise à jour sans le toucher : `scripts/update-x250.sh <adresse>` (`--boot` pour le prochain démarrage seulement). Le script vérifie le marqueur et choisit le système du clavier installé, pour ne jamais retirer l'accès SSH à la machine qu'il atteint.
+
+
+- `flake.nix` : `nixosConfigurations.x250`, `x250-bepo`, `x250-qwerty` (le clavier choisi à l'installation), `packages.installer` (l'ISO) ; la version développement `x250-dev` (`-bepo`, `-qwerty`) et sa clé `packages.installer-dev`, jamais construites ni publiées par la CI.
 - `hosts/x250/` : le système (démarrage, chiffrement LUKS, session, réseau, son, impression, autorisations) et `vm.nix` pour l'essayer en machine virtuelle.
+- `hosts/x250/dev.nix` : la version développement (ci-dessous).
 - `hosts/x250/plymouth/` : l'écran du mot de passe du disque (DESIGN §4.12 « Verrouillage »). Plymouth, dans l'initrd sous systemd, avec un thème `script` : systemd-cryptsetup lui demande le mot de passe, il dessine avec une vraie police (JetBrains Mono, licence OFL jointe) et lit le clavier de la console, donc la disposition choisie à l'installation. Sans lui, l'invite serait le texte anglais de systemd. `scripts/try-plymouth.sh` l'essaie dans une fenêtre, sans machine virtuelle.
 - `installer/` : l'image de la clé et `install.sh`, l'installateur en mode texte.
-- `scripts/` : `nix.sh` (construire), `try-installer.sh` (essayer la clé en machine virtuelle), `test-installer.py` (l'essayer seule, `nix run .#test-installer`), `try-plymouth.sh` (l'écran du mot de passe, dans une fenêtre), `publish.py` (envoyer au serveur, en morceaux) et `flash-installer.sh` (écrire la clé depuis le Mac, l'image publiée ou `--local`).
+- `scripts/` : `nix.sh` (construire), `try-installer.sh` (essayer la clé en machine virtuelle), `test-installer.py` (l'essayer seule, `nix run .#test-installer`), `try-plymouth.sh` (l'écran du mot de passe, dans une fenêtre), `publish.py` (envoyer au serveur, en morceaux), `update-x250.sh` (mettre à jour un X250 en version développement par SSH) et `flash-installer.sh` (écrire la clé depuis le Mac, l'image publiée ou `--local`).
 - `.github/workflows/` : `app-release.yml`, `ci.yml` et `publish.yml`, les mises à jour du X250.
 
 ## Ce que l'app attend du système
@@ -63,3 +71,14 @@ C'est le contrat entre les deux dépôts : un changement d'un côté demande sou
 - **Outils**, dans le `PATH` de la session, utilisables par l'utilisateur `auteur` sans mot de passe (règles polkit) : `nmcli`, `bluetoothctl`, `brightnessctl`, `wpctl`, `timedatectl`, `swaymsg`, `swayidle`, `wlsunset`, `lsblk`, `udevadm`, `udisksctl`, `lpstat`, `lp`, `lspci`, `systemctl` (veille, redémarrage, arrêt).
 - **Fichiers lus** : `/sys/class/power_supply`, `/sys/class/backlight`, `/sys/class/thermal`, `/sys/class/dmi/id/product_version`, `/sys/block`, `/proc/stat`, `/proc/cpuinfo`, `/proc/meminfo`, `/proc/uptime`.
 - **Services** : NetworkManager, BlueZ, PipeWire, UPower, UDisks2, CUPS avec Avahi.
+- **Mode d'essai** : dans la version développement seulement, l'app est lancée avec `CHARPENTIER_TEST_PORT=9222` ; jamais dans la version d'écriture.
+- **Version** : `/etc/charpentier/variant` vaut `developpement` dans la version développement ; absent dans la version d'écriture.
+- **Mises à jour** (phase 5.12, contrat 1, convenu avec l'app le 14 novembre 2026 ; le service reste à écrire, la référence côté app est `docs/x250-update-contract.md`) :
+  - Fichier d'état `/run/charpentier/update.json`, écrit par le service (root), atomiquement (écrit à côté puis renommé), mode 0644, réécrit à chaque démarrage du service ; absent, l'app ne montre rien :
+    `{ "contract": 1, "installed": {version, generation, installedAt, notes[], dataFormat}, "ready": {version, generation, publishedAt, receivedAt, notes[]} | null, "previous": {version, generation, dataFormat} | null, "setAside": {version, generation, dataFormat} | null, "lastCheck": ISO | null, "checking": bool, "failure": {version, at, reason} | null, "development": bool }`, `reason` parmi `signature`, `unreadable`, `disk-full`, `interrupted`.
+  - `version` : la version du système, `X.Y.Z` ou `X.Y.Z-N` ; `notes` : les lignes du pointeur `/api/updates/latest` ; `dataFormat` : `<app>/share/charpentier/data-format` du paquet de l'app de la génération (absent : 1).
+  - `ready` : téléchargée, signature vérifiée, déjà génération par défaut du prochain démarrage. Le service ne redémarre jamais.
+  - `setAside` : la version quittée par « revenir » ; plus annoncée, sauf si une plus récente arrive.
+  - `development` : `true` dans la version développement ; le service n'y installe rien.
+  - Commandes, pour `auteur`, sans mot de passe (polkit, `manage-units` limité à ces unités) : `systemctl start --no-block charpentier-update-check.service` (la même vérification que le minuteur horaire, réseau présent) ; `systemctl start charpentier-update-boot@<génération>.service`, qui n'accepte que la génération de `previous` ou de `setAside`, en fait celle du prochain démarrage, met à jour `setAside` puis le fichier et répond 0 (toute autre génération : code non nul, rien ne change). L'app lance ensuite `systemctl reboot`.
+  - Écran du mot de passe du disque : « mise à jour X.Y.Z » au premier démarrage d'une génération qui n'a jamais démarré, dit par la génération elle-même (le disque est encore fermé).
