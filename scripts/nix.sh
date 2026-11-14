@@ -15,6 +15,10 @@
 # Mac's internal disk; `--clean` removes it (the next run downloads it again).
 # The container is bounded (8 Go of memory, 6 processors): the Mac stays usable.
 #
+# Under Rosetta the kernel is aarch64: Nix cannot load its x86_64 seccomp
+# filter (« unable to load seccomp BPF program »), hence filter-syscalls false;
+# the sandbox is off as well, the container is the boundary.
+#
 # `--out <path>`, first: after the command, copies `result` (dereferenced) to
 # <path>, relative to this repository.
 set -euo pipefail
@@ -56,4 +60,4 @@ docker run --rm --platform linux/amd64 --memory=8g --memory-swap=8g --cpus=6 \
   -v "$app:/src/charpentier-writer:ro" \
   -v "$here:/src/charpentier-os" \
   -w /src/charpentier-os \
-  "$image" sh -c "git config --global --add safe.directory '*' && nix --extra-experimental-features 'nix-command flakes' --option sandbox false$args$copy"
+  "$image" sh -c "git config --global --add safe.directory '*' && nix --extra-experimental-features 'nix-command flakes' --option sandbox false --option filter-syscalls false$args$copy"
