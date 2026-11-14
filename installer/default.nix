@@ -45,11 +45,11 @@ let
     excludeShellChecks = [ "SC1112" ];
     text = builtins.readFile ./install.sh;
   };
-  env = [
-    "CHARPENTIER_VERSION=${version}"
-    "CHARPENTIER_KEY_LABEL=${label}"
-    "CHARPENTIER_SYSTEMS=${lib.concatStringsSep "," (lib.mapAttrsToList (k: s: "${k}=${s}") systems)}"
-  ];
+  env = {
+    CHARPENTIER_VERSION = version;
+    CHARPENTIER_KEY_LABEL = label;
+    CHARPENTIER_SYSTEMS = lib.concatStringsSep "," (lib.mapAttrsToList (k: s: "${k}=${s}") systems);
+  };
   # kmscon takes its keyboard when it starts: the installer asks for a new
   # start (exit 10) when the author changes it.
   kmscon = pkgs.writeShellScript "charpentier-kmscon" ''
@@ -132,15 +132,7 @@ in
       "systemd-vconsole-setup.service"
     ];
     onFailure = [ "charpentier-installer-plain.service" ];
-    environment = lib.listToAttrs (
-      map (
-        e:
-        let
-          p = lib.splitString "=" e;
-        in
-        lib.nameValuePair (lib.head p) (lib.concatStringsSep "=" (lib.tail p))
-      ) env
-    );
+    environment = env;
     serviceConfig = {
       ExecStart = kmscon;
       # 10: a new keyboard, start again with it.
@@ -154,18 +146,9 @@ in
 
   systemd.services.charpentier-installer-plain = {
     description = "Installation de Charpentier (console du noyau)";
-    environment = {
+    environment = env // {
       CHARPENTIER_PLAIN = "1";
-    }
-    // lib.listToAttrs (
-      map (
-        e:
-        let
-          p = lib.splitString "=" e;
-        in
-        lib.nameValuePair (lib.head p) (lib.concatStringsSep "=" (lib.tail p))
-      ) env
-    );
+    };
     serviceConfig = {
       ExecStart = lib.getExe installer;
       StandardInput = "tty";
@@ -179,6 +162,8 @@ in
 
   environment.systemPackages = [ installer ];
   networking.hostName = "charpentier-installation";
+  # The installer formats ext4 only: no ZFS on the key.
+  boot.supportedFilesystems.zfs = lib.mkForce false;
   networking.wireless.enable = lib.mkForce false;
   networking.networkmanager.enable = lib.mkForce false;
   documentation.enable = lib.mkForce false;
