@@ -208,6 +208,10 @@ in
 
     # ─── What the app's System service drives (phase 5.4 to 5.7) ───
     networking.networkmanager.enable = true;
+    # The X250's Intel 7265 Wi-Fi and Bluetooth need their firmware
+    # (linux-firmware): without it the card does not even appear. It also
+    # brings the CPU microcode updates nixos-hardware enables by default.
+    hardware.enableRedistributableFirmware = true;
     hardware.bluetooth.enable = true;
     services.pipewire = {
       enable = true;
