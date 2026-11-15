@@ -62,7 +62,7 @@ Pour les essais depuis le Yoga L13 (phases 5.10 et 5.10 bis du plan) : le systè
 - Les essais de l'app contre l'appareil (`apps/desktop/e2e/x250.device.ts` de l'app) : un tunnel `ssh -N -L 9222:127.0.0.1:9222 auteur@<adresse>`, le premier démarrage de l'app passé, la veille suspendue pendant les essais (`swaymsg '[app_id=".*"] inhibit_idle open'`), puis `CHARPENTIER_DEVICE=http://127.0.0.1:9222 pnpm --filter @charpentier/desktop test:device` (`CHARPENTIER_DEVICE_VM=1` en machine virtuelle, sans batterie).
 
 
-- `flake.nix` : `nixosConfigurations.x250`, `x250-bepo`, `x250-qwerty` (le clavier choisi à l'installation), `packages.installer` (l'ISO) ; la version développement `x250-dev` (`-bepo`, `-qwerty`) et sa clé `packages.installer-dev`, jamais construites ni publiées par la CI.
+- `flake.nix` : `nixosConfigurations.x250` et `x250-qwerty` (le clavier choisi à l'installation), `packages.installer` (l'ISO) ; la version développement `x250-dev` (`-qwerty`) et sa clé `packages.installer-dev`, jamais construites ni publiées par la CI.
 - `hosts/x250/` : le système (démarrage, chiffrement LUKS, session, réseau, son, impression, autorisations) et `vm.nix` pour l'essayer en machine virtuelle.
 - `hosts/x250/dev.nix` : la version développement (ci-dessous) ; elle ne s'endort pas sur inactivité (le rabat, si), pour rester joignable par SSH.
 - `hosts/x250/update/` : le service des mises à jour (phase 5.12) et la ligne « mise à jour » de l'écran du disque.
@@ -77,7 +77,7 @@ C'est le contrat entre les deux dépôts : un changement d'un côté demande sou
 
 - **Lancement** : `charpentier --appliance`, sous sway (Wayland, `NIXOS_OZONE_WL=1`), relancé s'il s'arrête. L'app est alors tout l'écran, sans barre de menus.
 - **Verrou** : la session sway a un mode `locked`, où aucun raccourci de sway ne passe ; l'app y entre et en sort par `swaymsg mode locked|default`.
-- **Clavier** : `/etc/charpentier/keyboard` contient `azerty`, `bepo` ou `qwerty`.
+- **Clavier** : `/etc/charpentier/keyboard` contient `azerty` ou `qwerty` (le bépo a été retiré avant la v0.1.1 ; un X250 qui aurait encore `bepo` n'a plus de système publié pour lui).
 - **Outils**, dans le `PATH` de la session, utilisables par l'utilisateur `auteur` sans mot de passe (règles polkit) : `nmcli`, `bluetoothctl`, `brightnessctl`, `wpctl`, `timedatectl`, `swaymsg`, `swayidle`, `wlsunset`, `lsblk`, `udevadm`, `udisksctl`, `lpstat`, `lp`, `lspci`, `systemctl` (veille, redémarrage, arrêt).
 - **Fichiers lus** : `/sys/class/power_supply`, `/sys/class/backlight`, `/sys/class/thermal`, `/sys/class/dmi/id/product_version`, `/sys/block`, `/proc/stat`, `/proc/cpuinfo`, `/proc/meminfo`, `/proc/uptime`.
 - **Services** : NetworkManager, BlueZ, PipeWire, UPower, UDisks2, CUPS avec Avahi.
@@ -85,7 +85,7 @@ C'est le contrat entre les deux dépôts : un changement d'un côté demande sou
 - **Version** : `/etc/charpentier/variant` vaut `developpement` dans la version développement ; absent dans la version d'écriture.
 - **Mises à jour** (phase 5.12, contrat 1, convenu avec l'app le 14 novembre 2026, la référence côté app est `docs/x250-update-contract.md` ; le service : `hosts/x250/update/`, essayé en machine virtuelle contre un faux serveur) :
   - Le compte : l'app écrit `~auteur/.config/charpentier/update-access.json` = `{"server", "token"}` (0600) à la connexion et au démarrage, et le retire à la déconnexion. Le service le lit en root sans le copier ; sans lui, rien n'est vérifié. Le jeton ne passe jamais sur une ligne de commande : un en-tête `Authorization: Bearer` pour le pointeur, un netrc (Basic) pour le cache, dans un dossier de root effacé à la fin.
-  - Le pointeur : `GET <server>/api/updates/latest` → `{version, notes, systems: {azerty, bepo, qwerty}, publishedAt}` (404 : rien de publié). `notes` est un texte, coupé aux sauts de ligne, sans lignes vides ni « - » de tête.
+  - Le pointeur : `GET <server>/api/updates/latest` → `{version, notes, systems: {azerty, qwerty}, publishedAt}` (404 : rien de publié). `notes` est un texte, coupé aux sauts de ligne, sans lignes vides ni « - » de tête.
   - Le téléchargement : `nix-store --realise` du système du clavier installé, depuis `<server>/nix-cache` seulement, chaque chemin signé par la clé de `hosts/x250/cache-key.pub` (`require-sigs`) ; puis le système doit être un système d'écriture du même clavier (pas de marqueur `variant`), sinon `unreadable`. Il devient la génération du prochain démarrage (`switch-to-configuration boot`), jamais celle qui tourne.
   - Le registre `/var/lib/charpentier/update/` (0700) : `generations.json` (génération → version, notes, dates ; pour la première installation, la version du paquet de l'app) et `state.json` (`ready`, `setAside`, `lastCheck`, `failure`).
   - Fichier d'état `/run/charpentier/update.json`, écrit par le service (root), atomiquement (écrit à côté puis renommé), mode 0644, réécrit à chaque démarrage du service ; absent, l'app ne montre rien :

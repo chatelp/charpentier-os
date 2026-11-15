@@ -4,7 +4,7 @@
 #   scripts/update-x250.sh 192.168.1.42
 #   NIX_SSHOPTS="-p 2222" scripts/update-x250.sh localhost      # the VM
 # Only the development variant listens to SSH (hosts/x250/dev.nix); the
-# keyboard installed there picks its system (x250-dev, -bepo, -qwerty), so an
+# keyboard installed there picks its system (x250-dev or x250-dev-qwerty), so an
 # update never takes SSH away from the X250 it reaches.
 # --boot : the new version for the next start only (nothing changes now).
 set -euo pipefail
@@ -35,7 +35,7 @@ variant=$(remote cat /etc/charpentier/variant 2>/dev/null || true)
 keyboard=$(remote cat /etc/charpentier/keyboard)
 case "$keyboard" in
   azerty) config=x250-dev ;;
-  bepo | qwerty) config=x250-dev-$keyboard ;;
+  qwerty) config=x250-dev-qwerty ;;
   *) echo "clavier inconnu sur $host : $keyboard" >&2; exit 1 ;;
 esac
 

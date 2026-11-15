@@ -133,7 +133,7 @@ key_present() { [ -e "/dev/disk/by-label/$key_label" ]; }
 
 # ─── 0. Welcome: the keyboard, tried ───
 welcome() {
-  local layouts=(azerty bepo qwerty) names=(azerty bépo qwerty) trial='' k i
+  local layouts=(azerty qwerty) trial='' k i n=2
   while true; do
     clear_screen
     head_lines 0
@@ -146,9 +146,9 @@ welcome() {
     line "$FAINT" 'environ 5 minutes'
     gap
     local keys=''
-    for i in 0 1 2; do
-      if [ "${layouts[$i]}" = "$layout" ]; then keys+="$INV ${names[$i]} $OFF  "
-      else keys+="$INK2 ${names[$i]} $OFF  "; fi
+    for i in "${!layouts[@]}"; do
+      if [ "${layouts[$i]}" = "$layout" ]; then keys+="$INV ${layouts[$i]} $OFF  "
+      else keys+="$INK2 ${layouts[$i]} $OFF  "; fi
     done
     line "$INK2" "clavier    $keys$FAINT← → changer"
     line "$INK2" "essai      $INK$trial$INK2▏"
@@ -171,8 +171,8 @@ welcome() {
     k=$(read_key)
     case "$k" in
       left | right)
-        for i in 0 1 2; do [ "${layouts[$i]}" = "$layout" ] && break; done
-        if [ "$k" = right ]; then i=$(((i + 1) % 3)); else i=$(((i + 2) % 3)); fi
+        for i in "${!layouts[@]}"; do [ "${layouts[$i]}" = "$layout" ] && break; done
+        if [ "$k" = right ]; then i=$(((i + 1) % n)); else i=$(((i + n - 1) % n)); fi
         echo "${layouts[$i]}" >"$state/layout"
         [ "$plain" = 1 ] && loadkeys "$(console_map "${layouts[$i]}")" >/dev/null 2>&1 && layout=${layouts[$i]} && continue
         # kmscon takes its keyboard when it starts: start it again with this one.
@@ -187,7 +187,7 @@ welcome() {
     esac
   done
 }
-console_map() { case $1 in bepo) echo fr-bepo ;; qwerty) echo us ;; *) echo fr ;; esac; }
+console_map() { case $1 in qwerty) echo us ;; *) echo fr ;; esac; }
 
 # ─── 1. The disk, erased after ⏎ ⏎ ───
 disk=''
@@ -255,7 +255,7 @@ read_key_timeout() {
 # ─── 2. The disk's password, twice ───
 password=''
 ask_password() {
-  local first='' second='' field=1 shown=0 help="8 caractères au moins · clavier ${layout/bepo/bépo}" warn=0 k
+  local first='' second='' field=1 shown=0 help="8 caractères au moins · clavier $layout" warn=0 k
   while true; do
     clear_screen
     head_lines 2

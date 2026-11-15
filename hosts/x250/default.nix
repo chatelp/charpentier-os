@@ -21,11 +21,6 @@ let
       xkb = "fr";
       variant = "";
     };
-    bepo = {
-      console = "fr-bepo";
-      xkb = "fr";
-      variant = "bepo";
-    };
     qwerty = {
       console = "us";
       xkb = "us";
@@ -93,7 +88,6 @@ in
   options.charpentier.keyboard = lib.mkOption {
     type = lib.types.enum [
       "azerty"
-      "bepo"
       "qwerty"
     ];
     default = "azerty";

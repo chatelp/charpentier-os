@@ -34,7 +34,7 @@ variant=$(remote cat /etc/charpentier/variant 2>/dev/null || true)
 keyboard=$(remote cat /etc/charpentier/keyboard)
 case "$keyboard" in
   azerty) config=x250-dev ;;
-  bepo | qwerty) config=x250-dev-$keyboard ;;
+  qwerty) config=x250-dev-qwerty ;;
   *) echo "clavier inconnu sur $host : $keyboard" >&2; exit 1 ;;
 esac
 

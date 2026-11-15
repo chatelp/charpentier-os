@@ -100,11 +100,9 @@
     {
       nixosConfigurations = {
         x250 = x250 "azerty";
-        x250-bepo = x250 "bepo";
         x250-qwerty = x250 "qwerty";
         # Never built nor published by CI (5.11): the build machine's only.
         x250-dev = x250-dev "azerty";
-        x250-dev-bepo = x250-dev "bepo";
         x250-dev-qwerty = x250-dev "qwerty";
       };
 
@@ -113,19 +111,16 @@
         # The install key's image (phase 5.9 bis), written by scripts/flash-installer.sh.
         installer = installerOf "charpentier-x250" {
           azerty = self.nixosConfigurations.x250;
-          bepo = self.nixosConfigurations.x250-bepo;
           qwerty = self.nixosConfigurations.x250-qwerty;
         };
         # The same key with the development variant: the first installation
         # of a development X250 (or VM), by hand; never published.
         installer-dev = installerOf "charpentier-x250-dev" {
           azerty = self.nixosConfigurations.x250-dev;
-          bepo = self.nixosConfigurations.x250-dev-bepo;
           qwerty = self.nixosConfigurations.x250-dev-qwerty;
         };
         netboot = netbootOf {
           azerty = self.nixosConfigurations.x250;
-          bepo = self.nixosConfigurations.x250-bepo;
           qwerty = self.nixosConfigurations.x250-qwerty;
         };
         default = self.packages.${system}.installer;
