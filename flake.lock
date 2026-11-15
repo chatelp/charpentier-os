@@ -7,15 +7,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1794679185,
-        "narHash": "sha256-ztP2mNwhRZ09ALC6GrR/wjixgZ/RIALfG54l2PQJh2s=",
+        "lastModified": 1794686971,
+        "narHash": "sha256-nWrhgDFdpbDvig1QTTomnk7Juia8jw9jD38mIjHNAyc=",
         "owner": "chatelp",
         "repo": "charpentier",
-        "rev": "66dd330f54a449cf5136fdf31d4182fca79c9a8d",
+        "rev": "4ae2aca8c8699497baed5f15a105da460c16273d",
         "type": "github"
       },
       "original": {
         "owner": "chatelp",
+        "ref": "v0.1.0",
         "repo": "charpentier",
         "type": "github"
       }

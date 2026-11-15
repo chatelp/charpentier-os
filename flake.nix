@@ -12,7 +12,7 @@
     # The app: its main branch, pushed to GitHub. Moving to a newer app:
     # `scripts/nix.sh flake update charpentier`; an app not pushed yet:
     # `--override-input charpentier path:<the app's checkout>`.
-    charpentier.url = "github:chatelp/charpentier";
+    charpentier.url = "github:chatelp/charpentier/v0.1.0";
     charpentier.inputs.nixpkgs.follows = "nixpkgs";
     # The disk's layout for nixos-anywhere (development variant only).
     disko.url = "github:nix-community/disko";
