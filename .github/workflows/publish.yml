@@ -3,6 +3,8 @@
 # - On main, when the app's input moved to a release (vX.Y.Z): version X.Y.Z.
 # - On a release of charpentier-os (a change of the system alone), tagged
 #   X.Y.Z-N by Pierre, X.Y.Z being the app's version: version X.Y.Z-N.
+# - By hand (workflow_dispatch), to send again the release main is on, when
+#   its run failed: version X.Y.Z, the notes of the pull request that moved it.
 # Any other change on main waits for one of them.
 name: publish
 
@@ -11,6 +13,7 @@ on:
     branches: [main]
   release:
     types: [published]
+  workflow_dispatch:
 
 concurrency:
   group: publish
@@ -53,6 +56,13 @@ jobs:
             [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ && "${version%%-*}" = "$app" ]] ||
               { echo "::error::release « $RELEASE_TAG »: $app or $app-N expected (the app's version, then the system's)"; exit 1; }
             printf '%s\n' "$RELEASE_NOTES" >notes.md
+          elif [ "$EVENT" = workflow_dispatch ]; then
+            ref=$(jq -r '.nodes.charpentier.original.ref // ""' flake.lock)
+            [[ "$ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+              { echo "::error::main's app is not on a release (ref « $ref »): nothing to send again"; exit 1; }
+            version=$app
+            moved=$(git log -1 --format=%H -- flake.lock)
+            gh api "repos/$GITHUB_REPOSITORY/commits/$moved/pulls" --jq '.[0].body // ""' >notes.md
           else
             rev() { jq -r '.nodes.charpentier.locked.rev // ""'; }
             now=$(rev <flake.lock)

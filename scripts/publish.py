@@ -36,7 +36,9 @@ TOKEN = os.environ.get("CHARPENTIER_CACHE_TOKEN", "")
 
 def request(method, url, body=None, headers=None):
     """One HTTP request; returns (status, body). Retries the network's failures."""
-    headers = {"Authorization": f"Bearer {TOKEN}", **(headers or {})}
+    # A User-Agent of its own: Cloudflare, in front of the server, refuses
+    # urllib's default one (Browser Integrity Check, 403 « error code: 1010 »).
+    headers = {"Authorization": f"Bearer {TOKEN}", "User-Agent": "charpentier-os-publish/1", **(headers or {})}
     for attempt in range(5):
         req = urllib.request.Request(url, data=body, method=method, headers=headers)
         try:
