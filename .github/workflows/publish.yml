@@ -90,7 +90,7 @@ jobs:
       - name: Systems
         if: steps.version.outputs.publish == 'true'
         run: |
-          for k in azerty bepo qwerty; do
+          for k in azerty qwerty; do
             case $k in azerty) c=x250 ;; *) c=x250-$k ;; esac
             nix build --no-link --print-out-paths --print-build-logs \
               ".#nixosConfigurations.$c.config.system.build.toplevel" >"system-$k"
@@ -107,7 +107,7 @@ jobs:
         run: |
           umask 077
           printf '%s' "$NIX_SIGNING_KEY" >"$RUNNER_TEMP/signing-key"
-          mapfile -t systems < <(cat system-azerty system-bepo system-qwerty)
+          mapfile -t systems < <(cat system-azerty system-qwerty)
           CHARPENTIER_CACHE_TOKEN=$CACHE_TOKEN NIX_SIGNING_KEY_FILE=$RUNNER_TEMP/signing-key \
             python3 scripts/publish.py cache "${systems[@]}"
 
@@ -118,8 +118,8 @@ jobs:
           CACHE_TOKEN: ${{ secrets.CHARPENTIER_CACHE_TOKEN }}
         run: |
           jq -n --arg version "$VERSION" --rawfile notes notes.md \
-            --arg azerty "$(cat system-azerty)" --arg bepo "$(cat system-bepo)" --arg qwerty "$(cat system-qwerty)" \
-            '{version: $version, notes: $notes, systems: {azerty: $azerty, bepo: $bepo, qwerty: $qwerty}}' >pointer.json
+            --arg azerty "$(cat system-azerty)" --arg qwerty "$(cat system-qwerty)" \
+            '{version: $version, notes: $notes, systems: {azerty: $azerty, qwerty: $qwerty}}' >pointer.json
           cat pointer.json
           curl --fail-with-body --silent --show-error -X PUT "$SERVER/api/updates/latest" \
             -H "Authorization: Bearer $CACHE_TOKEN" -H 'Content-Type: application/json' --data @pointer.json

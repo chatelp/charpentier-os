@@ -64,7 +64,6 @@ let
   kmscon = pkgs.writeShellScript "charpentier-kmscon" ''
     layout=$(cat /run/charpentier/layout 2>/dev/null || echo azerty)
     case $layout in
-      bepo) xkb="--xkb-layout=fr --xkb-variant=bepo" ;;
       qwerty) xkb="--xkb-layout=us" ;;
       *) xkb="--xkb-layout=fr" ;;
     esac
