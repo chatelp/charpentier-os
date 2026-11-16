@@ -34,12 +34,15 @@ let
     cfg.testPort != null
   ) "export CHARPENTIER_TEST_PORT=${toString cfg.testPort}\n";
 
-  # The app, started again if it ever stops; Wayland native.
+  # The app, started again if it ever stops, as long as its Sway answers:
+  # a session started again (greetd restarted by an update) leaves no loop
+  # behind, starting the app with no screen every second. Wayland native.
   session = pkgs.writeShellScript "charpentier-session" ''
     export NIXOS_OZONE_WL=1
     ${testMode}while true; do
       ${lib.getExe charpentier} --appliance
       sleep 1
+      ${lib.getExe' pkgs.sway "swaymsg"} -q -t get_version || exit 0
     done
   '';
 
@@ -228,6 +231,8 @@ in
       bluez
       cups
       pciutils
+      # lsblk, and setpriv: the app starts its long-running programs
+      # (nmcli monitor, swayidle…) under `setpriv --pdeathsig KILL`.
       util-linux
       swayidle
       wlsunset
