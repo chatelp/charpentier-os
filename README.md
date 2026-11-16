@@ -57,7 +57,7 @@ Pour les essais depuis le Yoga L13 (phases 5.10 et 5.10 bis du plan) : le systè
 
 - Les clés admises : `hosts/x250/dev-keys.pub`, une par ligne (celle du Yoga L13). Sans elle, la version développement ne se construit pas.
 - Première installation, à la main : `scripts/nix.sh --out dist/installer-dev build .#installer-dev`, puis la clé (ou, pour la VM, `CHARPENTIER_VM=dist/vm-dev CHARPENTIER_IMAGES=dist/installer-dev scripts/try-installer.sh`).
-- Mise à jour sans le toucher : `scripts/update-x250.sh <adresse>` (`--boot` pour le prochain démarrage seulement). Le script vérifie le marqueur et choisit le système du clavier installé, pour ne jamais retirer l'accès SSH à la machine qu'il atteint.
+- Mise à jour sans le toucher : `scripts/update-x250.sh <adresse>` (`--boot` pour le prochain démarrage seulement ; `--app <référence>` pour une autre app que celle du `flake.lock`, sans l'écrire : `--app github:chatelp/charpentier/<commit>` ou `--app path:../charpentier`). Le script vérifie le marqueur et choisit le système du clavier installé, pour ne jamais retirer l'accès SSH à la machine qu'il atteint. Un `switch` ne relance jamais la session lui-même (greetd n'est pas redémarré) : le script la relance quand elle a changé (la nouvelle app, sway), ce qui ferme l'app en cours.
 - Réinstallation de zéro, à distance : `scripts/reinstall-x250.sh <adresse> <fichier du mot de passe du disque>`, par nixos-anywhere (redémarrage en mémoire, puis disque effacé et disposé comme par l'installateur, `hosts/x250/disko.nix`). Au redémarrage, le mot de passe du disque se tape sur le X250 (ou par le moniteur de QEMU).
 - Les essais de l'app contre l'appareil (`apps/desktop/e2e/x250.device.ts` de l'app) : un tunnel `ssh -N -L 9222:127.0.0.1:9222 auteur@<adresse>`, le premier démarrage de l'app passé, la veille suspendue pendant les essais (`swaymsg '[app_id=".*"] inhibit_idle open'`), puis `CHARPENTIER_DEVICE=http://127.0.0.1:9222 pnpm --filter @charpentier/desktop test:device` (`CHARPENTIER_DEVICE_VM=1` en machine virtuelle, sans batterie).
 
@@ -75,10 +75,11 @@ Pour les essais depuis le Yoga L13 (phases 5.10 et 5.10 bis du plan) : le systè
 
 C'est le contrat entre les deux dépôts : un changement d'un côté demande souvent le changement correspondant de l'autre. Côté app, il est lu par le service `System` (`packages/platform-desktop/src/main/system`) et par `apps/desktop/src/main/index.ts`.
 
-- **Lancement** : `charpentier --appliance`, sous sway (Wayland, `NIXOS_OZONE_WL=1`), relancé s'il s'arrête. L'app est alors tout l'écran, sans barre de menus.
+- **Lancement** : `charpentier --appliance`, sous sway (Wayland, `NIXOS_OZONE_WL=1`), relancé s'il s'arrête, tant que son sway répond (une session relancée ne laisse pas l'ancienne boucle derrière elle). L'app est alors tout l'écran, sans barre de menus.
+- **Arrêt** : SIGTERM la fait quitter normalement ; ses programmes de longue durée (`nmcli monitor`, `udevadm monitor`, `swaymsg subscribe`, `swayidle`) sont lancés sous `setpriv --pdeathsig KILL` et meurent avec elle, même tuée (SIGKILL).
 - **Verrou** : la session sway a un mode `locked`, où aucun raccourci de sway ne passe ; l'app y entre et en sort par `swaymsg mode locked|default`.
 - **Clavier** : `/etc/charpentier/keyboard` contient `azerty` ou `qwerty` (le bépo a été retiré avant la v0.1.1 ; un X250 qui aurait encore `bepo` n'a plus de système publié pour lui).
-- **Outils**, dans le `PATH` de la session, utilisables par l'utilisateur `auteur` sans mot de passe (règles polkit) : `nmcli`, `bluetoothctl`, `brightnessctl`, `wpctl`, `timedatectl`, `swaymsg`, `swayidle`, `wlsunset`, `lsblk`, `udevadm`, `udisksctl`, `lpstat`, `lp`, `lspci`, `systemctl` (veille, redémarrage, arrêt).
+- **Outils**, dans le `PATH` de la session, utilisables par l'utilisateur `auteur` sans mot de passe (règles polkit) : `nmcli`, `bluetoothctl`, `brightnessctl`, `wpctl`, `timedatectl`, `swaymsg`, `swayidle`, `wlsunset`, `lsblk`, `setpriv`, `udevadm`, `udisksctl`, `lpstat`, `lp`, `lspci`, `systemctl` (veille, redémarrage, arrêt).
 - **Fichiers lus** : `/sys/class/power_supply`, `/sys/class/backlight`, `/sys/class/thermal`, `/sys/class/dmi/id/product_version`, `/sys/block`, `/proc/stat`, `/proc/cpuinfo`, `/proc/meminfo`, `/proc/uptime`.
 - **Services** : NetworkManager, BlueZ, PipeWire, UPower, UDisks2, CUPS avec Avahi.
 - **Mode d'essai** : dans la version développement seulement, l'app est lancée avec `CHARPENTIER_TEST_PORT=9222` ; jamais dans la version d'écriture.
