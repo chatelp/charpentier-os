@@ -44,6 +44,14 @@ Le X250 ne reçoit que des versions numérotées (D-31, phase 5.11 du plan de l'
 - Réglages : « Allow auto-merge » ; une règle sur main qui demande une pull request et le check « systèmes, clé et essai en VM », sans approbation.
 - Dans l'app : le jeton `CHARPENTIER_OS_DISPATCH` qui envoie le `repository_dispatch`.
 
+## Réglages du BIOS du X250
+
+À faire une fois sur le X250 (F1 au démarrage), avant d'installer. Menus du BIOS N10ET63W (1.42), celui du X250 de Pierre :
+
+- Startup → UEFI/Legacy Boot : « UEFI Only », et CSM Support : « No ». Le système ne démarre qu'en UEFI (systemd-boot).
+- Security → Secure Boot : désactivé. Ni systemd-boot ni l'iPXE de l'installation par le réseau ne sont signés.
+- Config → Keyboard/Mouse → « F1-F12 as Primary Function » : « Disabled ». La rangée du haut est alors le volume, la luminosité et le micro, que l'app lit ; F1 à F12 ne servent pas dans Charpentier OS. Fn+Échap bascule le même verrou à la main (le voyant de Fn allumé : F1 à F12 d'abord). Le système ne le voit pas : `thinkpad_acpi` n'en donne rien sur le X250.
+
 ## Installation par le réseau
 
 Phase 5.9 ter (D-32) : le X250 démarre l'installateur par son câble Ethernet, sans clé (F12, puis la carte réseau). Le même installateur que la clé (`installer/default.nix`), en noyau, initrd (le système en mémoire, environ 1,5 Go compressé) et ligne de commande : `packages.netboot` (`installer/netboot.nix`), envoyé par `publish.yml` sur le serveur de synchro (`PUT /api/netboot/<version>/{bzImage,initrd,cmdline}`) avec l'image de la clé. Sur la maison, Pixiecore (profil `netboot` de l'app, éteint par défaut) répond en proxyDHCP sans remplacer la box et demande au serveur quoi démarrer : l'installateur pour la seule MAC du X250, rien aux autres. Sans clé, la fin de l'installation dit seulement « ⏎ redémarrer ».
