@@ -246,6 +246,23 @@ cmd_check() {
     return
   fi
 
+  # The development variant (D-42): the latest wins. A version published
+  # before the newest system here (an update by update-x250.sh, say) is older
+  # than it, and is not taken; one published after it is.
+  if [ "$channel" = dev ]; then
+    local newest made at=0
+    newest=$(gens | tail -1)
+    if [ -n "$newest" ]; then
+      made=$(stat -c %Y "$profiles/system-$newest-link")
+      [ -n "$published" ] && at=$(date -d "$published" +%s 2>/dev/null || echo 0)
+      if [ "$at" -le "$made" ]; then
+        log "mise à jour $version publiée avant la génération $newest : rien n'est pris"
+        finish
+        return
+      fi
+    fi
+  fi
+
   # Download what changed, from the server's cache only, every path signed by
   # the key laid at installation.
   log "mise à jour $version : téléchargement de $path"

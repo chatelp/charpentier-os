@@ -2,8 +2,9 @@
 # machines against a fake server (scripts/update-api.py):
 #   nix build .#checks.x86_64-linux.update-channels -L
 # A writing system reads /api/updates/latest only and takes writing systems
-# only; the development variant reads /api/updates/dev only and takes
-# development systems only. The systems offered are stand-ins (a
+# only; the development variant reads /api/updates/dev only, takes
+# development systems only, and never one published before its newest
+# system (the latest wins). The systems offered are stand-ins (a
 # switch-to-configuration that only says it was called), signed by a key of
 # the test's own; the service itself is the X250's (hosts/x250/update).
 { pkgs, lib }:
@@ -23,6 +24,7 @@ let
     '';
   writing = standIn "x250-essai-ecriture" null;
   dev = standIn "x250-essai-dev" "developpement";
+  dev2 = standIn "x250-essai-dev-2" "developpement";
   update = import ../hosts/x250/update/package.nix {
     inherit pkgs;
     inherit (pkgs) nix;
@@ -46,6 +48,7 @@ pkgs.testers.runNixOSTest {
         system.extraDependencies = [
           writing
           dev
+          dev2
         ];
         nix.settings.experimental-features = [ "nix-command" ];
         networking.firewall.allowedTCPPorts = [ 80 ];
@@ -61,11 +64,11 @@ pkgs.testers.runNixOSTest {
   testScript = ''
     import json
 
-    writing, dev_system = "${writing}", "${dev}"
+    writing, dev_system, dev_system_2 = "${writing}", "${dev}", "${dev2}"
 
-    def point(channel, version, path):
+    def point(channel, version, path, published="2026-11-18T12:00:00Z"):
         body = json.dumps({"version": version, "notes": "- essai", "systems": {"azerty": path},
-                           "publishedAt": "2026-11-18T12:00:00Z"})
+                           "publishedAt": published})
         server.succeed(f"echo '{body}' >/srv/api/{channel}.json")
 
     def check(machine):
@@ -81,7 +84,7 @@ pkgs.testers.runNixOSTest {
     server.wait_for_open_port(80)
     server.succeed(
         "nix-store --generate-binary-cache-key essai-1 /srv/key.sec /srv/key.pub",
-        f"nix copy --to 'file:///srv/cache?secret-key=/srv/key.sec' {writing} {dev_system}",
+        f"nix copy --to 'file:///srv/cache?secret-key=/srv/key.sec' {writing} {dev_system} {dev_system_2}",
     )
     key = server.succeed("cat /srv/key.pub").strip()
     for m in (ecriture, dev):
@@ -124,6 +127,18 @@ pkgs.testers.runNixOSTest {
         assert asked == ["/api/updates/dev"], asked
         assert state["ready"]["version"] == "0.2.0-dev.3" and state["failure"] is None, state
         dev.succeed("grep -qx '${dev} boot' /tmp/switched")
+
+    with subtest("the development variant: the latest wins, a version published before its newest system is not taken"):
+        before = dev.succeed("cat /tmp/switched")
+        point("dev", "0.2.0-dev.4", dev_system_2, "2000-01-01T00:00:00Z")
+        state, _ = check(dev)
+        assert state["ready"]["version"] == "0.2.0-dev.3" and state["failure"] is None, state
+        assert dev.succeed("cat /tmp/switched") == before
+        dev.fail("nix-store --check-validity ${dev2}")
+        point("dev", "0.2.0-dev.4", dev_system_2, "2099-01-01T00:00:00Z")
+        state, _ = check(dev)
+        assert state["ready"]["version"] == "0.2.0-dev.4", state
+        dev.succeed("grep -qx '${dev2} boot' /tmp/switched")
 
     with subtest("nothing on /dev: the development variant finds nothing, and installs nothing"):
         server.succeed("rm /srv/api/dev.json")
