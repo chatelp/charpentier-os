@@ -1,8 +1,10 @@
 # The X250's development variant (docs/PLAN.md phase 5.10 bis): the writing
 # system, plus what the build machine needs to update it (5.10), reinstall it
 # from zero (nixos-anywhere) and run the app's device tests against it.
-# It never reaches a normal X250: CI never builds nor publishes it (5.11), and
-# its marker, /etc/charpentier/variant, is refused by the update service (5.12).
+# It never reaches a normal X250: it has its own update channel (D-42, phase
+# 5.12 bis: /api/updates/dev, published by scripts/publish-dev.sh, never with
+# the releases), and its marker, /etc/charpentier/variant, is refused by the
+# update service of a writing system (5.12), which reads the releases only.
 {
   config,
   lib,
