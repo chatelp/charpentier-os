@@ -21,6 +21,18 @@
         "type": "github"
       }
     },
+    "dev-keys": {
+      "flake": false,
+      "locked": {
+        "path": "./hosts/x250/no-dev-keys",
+        "type": "path"
+      },
+      "original": {
+        "path": "./hosts/x250/no-dev-keys",
+        "type": "path"
+      },
+      "parent": []
+    },
     "disko": {
       "inputs": {
         "nixpkgs": [
@@ -80,6 +92,7 @@
     "root": {
       "inputs": {
         "charpentier": "charpentier",
+        "dev-keys": "dev-keys",
         "disko": "disko",
         "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs"

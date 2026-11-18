@@ -1,5 +1,5 @@
 result
 dist/
 # The development variant's SSH keys, the build machine's own: never
-# committed. The flake sees them once added with `git add -f -N`.
+# committed, given to the flake outside its sources (scripts/dev-keys.sh).
 hosts/x250/dev-keys.pub

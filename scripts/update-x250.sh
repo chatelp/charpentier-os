@@ -15,6 +15,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# shellcheck source=scripts/dev-keys.sh
+. scripts/dev-keys.sh
 action=switch
 app=()
 args=()
@@ -54,7 +56,7 @@ esac
 before=$(remote readlink -f /run/current-system)
 echo "$host : $config, $action"
 nix run --inputs-from . nixpkgs#nixos-rebuild -- "$action" \
-  --flake ".#$config" "${app[@]}" --target-host "$target" --sudo --no-reexec
+  --flake ".#$config" "${app[@]}" "${devkeys[@]}" --target-host "$target" --sudo --no-reexec
 after=$(remote readlink -f /nix/var/nix/profiles/system)
 if [ "$before" = "$after" ]; then
   echo "déjà à jour : $after"

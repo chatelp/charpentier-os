@@ -14,6 +14,11 @@
     # `--override-input charpentier path:<the app's checkout>`.
     charpentier.url = "github:chatelp/charpentier/v0.2.0";
     charpentier.inputs.nixpkgs.follows = "nixpkgs";
+    # The development variant's SSH keys (hosts/x250/dev.nix): none in this
+    # repository. The build machine gives its own file, never committed, by
+    # --override-input dev-keys path:<file> (scripts/dev-keys.sh).
+    dev-keys.url = "path:./hosts/x250/no-dev-keys";
+    dev-keys.flake = false;
     # The disk's layout for nixos-anywhere (development variant only).
     disko.url = "github:nix-community/disko";
     disko.inputs.nixpkgs.follows = "nixpkgs";
@@ -26,6 +31,7 @@
       nixos-hardware,
       charpentier,
       disko,
+      dev-keys,
       ...
     }:
     let
@@ -46,11 +52,11 @@
         };
       # The development variant (phase 5.10 bis, hosts/x250/dev.nix): SSH by
       # key from the home network, the app's test mode. Its keys: the build
-      # machine's, in hosts/x250/dev-keys.pub (one per line), never committed;
-      # their comments (user@host) are left out, the system being published on
-      # the development channel (D-42).
+      # machine's, one per line, given as the input dev-keys (never committed:
+      # scripts/dev-keys.sh); their comments (user@host) are left out, the
+      # system being published on the development channel (D-42).
       lib = nixpkgs.lib;
-      devKeys = ./hosts/x250/dev-keys.pub;
+      devKeys = dev-keys;
       x250-dev =
         keyboard:
         (x250 keyboard).extendModules {
@@ -59,7 +65,7 @@
             disko.nixosModules.disko
             ./hosts/x250/disko.nix
             {
-              charpentier.dev.authorizedKeys = lib.optionals (builtins.pathExists devKeys) (
+              charpentier.dev.authorizedKeys = (
                 map (l: lib.concatStringsSep " " (lib.take 2 (lib.filter (w: w != "") (lib.splitString " " l)))) (
                   lib.filter (l: l != "" && !lib.hasPrefix "#" l) (lib.splitString "\n" (builtins.readFile devKeys))
                 )

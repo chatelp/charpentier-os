@@ -36,11 +36,11 @@ done
 : "${NIX_SIGNING_KEY_FILE:?the secret key that signs the paths (charpentier-x250-1)}"
 [ -r "$NIX_SIGNING_KEY_FILE" ] || { echo "✗ $NIX_SIGNING_KEY_FILE illisible" >&2; exit 1; }
 
-# The keys, seen by the flake (a file Git does not know is not part of it).
-grep -qE '^(ssh|ecdsa)-' hosts/x250/dev-keys.pub 2>/dev/null ||
+# The keys, given to the flake outside its sources.
+# shellcheck source=scripts/dev-keys.sh
+. scripts/dev-keys.sh
+[ ${#devkeys[@]} -gt 0 ] ||
   { echo "✗ pas de clé dans hosts/x250/dev-keys.pub : le X250 perdrait SSH" >&2; exit 1; }
-git ls-files --error-unmatch hosts/x250/dev-keys.pub >/dev/null 2>&1 ||
-  git add --force --intent-to-add hosts/x250/dev-keys.pub
 
 # The token never reaches a command line.
 auth=$(mktemp)
@@ -64,7 +64,7 @@ echo "version : $version (sur /dev : ${last:-rien})"
 
 # What it is made of, for « À propos ».
 os=$(git rev-parse --short HEAD)
-git diff --quiet HEAD -- . ':!hosts/x250/dev-keys.pub' || os="$os, modifié"
+git diff --quiet HEAD || os="$os, modifié"
 if [ ${#app[@]} -gt 0 ]; then
   from=${app[2]}
 else
@@ -74,7 +74,7 @@ fi
 systems=()
 for k in azerty qwerty; do
   case $k in azerty) c=x250-dev ;; *) c=x250-dev-$k ;; esac
-  systems+=("$(nixe build --no-link --print-out-paths "${app[@]}" \
+  systems+=("$(nixe build --no-link --print-out-paths "${app[@]}" "${devkeys[@]}" \
     ".#nixosConfigurations.$c.config.system.build.toplevel")")
 done
 printf '  %s\n' "${systems[@]}"
