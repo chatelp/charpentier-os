@@ -1,5 +1,7 @@
 # The X250's updates (docs/PLAN.md phase 5.12): every hour, network present,
-# the version published on the sync server, downloaded from its cache only,
+# the version published on the sync server (the writing system's releases on
+# /api/updates/latest; the development variant's own channel, /api/updates/dev,
+# D-42, phase 5.12 bis), downloaded from its cache only,
 # signed by the key laid here at installation (../cache-key.pub), installed
 # as the next start's generation; never a restart. The app reads
 # /run/charpentier/update.json and may ask only three things (polkit below).
@@ -11,20 +13,9 @@
   ...
 }:
 let
-  update = pkgs.writeShellApplication {
-    name = "charpentier-update";
-    runtimeInputs = with pkgs; [
-      coreutils
-      curl
-      gnused
-      gnugrep
-      jq
-      util-linux # flock
-      config.nix.package
-    ];
-    text = builtins.readFile ./update.sh;
-    # shellcheck runs in the build; jq's programs are in single quotes on purpose.
-    excludeShellChecks = [ "SC2016" ];
+  update = import ./package.nix {
+    inherit pkgs;
+    nix = config.nix.package;
   };
   key = ../cache-key.pub;
   env = {

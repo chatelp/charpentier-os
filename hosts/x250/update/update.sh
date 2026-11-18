@@ -7,6 +7,10 @@
 #   update.sh boot <gen>  the next start on <gen>: previous, or set aside
 # It never restarts the X250, and never speaks to the author: it writes
 # /run/charpentier/update.json, which the app reads.
+# Two channels (D-42, phase 5.12 bis), one per variant, never crossed: the
+# writing system reads /api/updates/latest (X.Y.Z, X.Y.Z-N) and takes writing
+# systems only; the development variant reads /api/updates/dev (X.Y.Z-dev.N)
+# and takes development systems only.
 # shellcheck disable=SC2016 # jq's programs, in single quotes on purpose
 set -euo pipefail
 umask 022
@@ -19,6 +23,18 @@ saved=$lib/state.json    # {ready, setAside, lastCheck, failure}, kept across st
 profiles=/nix/var/nix/profiles
 access=${CHARPENTIER_UPDATE_ACCESS:-/home/auteur/.config/charpentier/update-access.json}
 key_file=${CHARPENTIER_UPDATE_KEY:?the cache\'s public key}
+
+# The channel of the system that runs: its pointer, its version numbers, the
+# variant of the systems it takes (none: a writing system).
+if [ "$(cat /etc/charpentier/variant 2>/dev/null)" = developpement ]; then
+  channel=dev
+  versions='^[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+$'
+  variant=developpement
+else
+  channel=latest
+  versions='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$'
+  variant=
+fi
 
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 log() { echo "$*" >&2; }
@@ -100,7 +116,7 @@ saved_gen() {
 # ─── The file the app reads ───
 write_state() {
   local checking=${1:-false} inst prev ready aside development=false
-  [ "$(cat /etc/charpentier/variant 2>/dev/null)" = developpement ] && development=true
+  [ "$channel" = dev ] && development=true
   inst=$(installed_gen)
   ready=$(saved_gen ready)
   aside=$(saved_gen setAside)
@@ -167,11 +183,6 @@ fail() { # reason version
 }
 
 cmd_check() {
-  if [ "$(cat /etc/charpentier/variant 2>/dev/null)" = developpement ]; then
-    log "version développement : rien n'est installé ici"
-    write_state
-    return
-  fi
   if [ ! -r "$access" ]; then
     log "pas de compte (pas de $access) : rien n'est vérifié"
     write_state
@@ -197,7 +208,7 @@ cmd_check() {
 
   local code
   code=$(curl -sS --max-time 60 -o "$tmp/pointer.json" -w '%{http_code}' -H @"$tmp/header" \
-    "$server/api/updates/latest" 2>"$tmp/curl.err") || code=000
+    "$server/api/updates/$channel" 2>"$tmp/curl.err") || code=000
   case $code in
     200) ;;
     404) log "aucune version publiée" && finish && return ;;
@@ -210,7 +221,7 @@ cmd_check() {
   path=$(jq -r --arg k "$keyboard" '.systems[$k] // empty' "$tmp/pointer.json" 2>/dev/null || true)
   published=$(jq -r '.publishedAt // empty' "$tmp/pointer.json")
   notes=$(jq -c '(.notes // "") | tostring | split("\n") | map(sub("^\\s*-\\s*"; "") | sub("\\s+$"; "")) | map(select(length > 0))' "$tmp/pointer.json")
-  if ! [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ ]] || ! [[ $path =~ ^/nix/store/[a-z0-9]{32}-nixos-system-[^/]+$ ]]; then
+  if ! [[ $version =~ $versions ]] || ! [[ $path =~ ^/nix/store/[a-z0-9]{32}-nixos-system-[^/]+$ ]]; then
     fail unreadable "${version:-?}"
     return
   fi
@@ -235,6 +246,29 @@ cmd_check() {
     return
   fi
 
+  # The development variant (D-42): the latest wins. A version published
+  # before the newest system here is older than it, and is not taken; one
+  # published after it is. That system's date: its publication's, when it
+  # came from the pointer (a version published while the previous one was
+  # downloading stays newer than it); else its own making's (an update by
+  # update-x250.sh, say, even before the restart).
+  if [ "$channel" = dev ]; then
+    local newest made at=0 from
+    newest=$(gens | tail -1)
+    if [ -n "$newest" ]; then
+      from=$(jq -r --arg g "$newest" '.[$g].publishedAt // empty' "$db")
+      if [ -n "$from" ] && made=$(date -d "$from" +%s 2>/dev/null); then :; else
+        made=$(stat -c %Y "$profiles/system-$newest-link")
+      fi
+      [ -n "$published" ] && at=$(date -d "$published" +%s 2>/dev/null || echo 0)
+      if [ "$at" -le "$made" ]; then
+        log "mise à jour $version publiée avant la génération $newest : rien n'est pris"
+        finish
+        return
+      fi
+    fi
+  fi
+
   # Download what changed, from the server's cache only, every path signed by
   # the key laid at installation.
   log "mise à jour $version : téléchargement de $path"
@@ -256,10 +290,11 @@ cmd_check() {
     fi
     return
   fi
-  # A writing system, for this keyboard: never the development variant.
+  # A system of this channel, for this keyboard: a writing system never takes
+  # the development variant, nor the development variant a writing system.
   if ! [ -x "$path/bin/switch-to-configuration" ] ||
     [ "$(cat "$path/etc/charpentier/keyboard" 2>/dev/null)" != "$keyboard" ] ||
-    [ -e "$path/etc/charpentier/variant" ]; then
+    [ "$(cat "$path/etc/charpentier/variant" 2>/dev/null || true)" != "$variant" ]; then
     fail unreadable "$version"
     return
   fi

@@ -38,11 +38,21 @@ case "$keyboard" in
   *) echo "clavier inconnu sur $host : $keyboard" >&2; exit 1 ;;
 esac
 
+# The keys are given to the flake outside its sources (scripts/dev-keys.sh),
+# which nixos-anywhere cannot pass on: the system and its disk's script are
+# built here, then handed to it as store paths.
+# shellcheck source=scripts/dev-keys.sh
+. scripts/dev-keys.sh
+[ ${#devkeys[@]} -gt 0 ] || { echo "pas de clé dans hosts/x250/dev-keys.pub : le X250 perdrait SSH" >&2; exit 1; }
+build() { nix build --no-link --print-out-paths "${devkeys[@]}" ".#nixosConfigurations.$config.config.system.build.$1"; }
+disko=$(build diskoScript)
+system=$(build toplevel)
+
 echo "$host : effacé puis réinstallé ($config)"
-args=(--flake ".#$config" --target-host "auteur@$host"
+args=(--store-paths "$disko" "$system" --target-host "auteur@$host"
   --ssh-port "$port" --post-kexec-ssh-port "$port"
   --disk-encryption-keys /tmp/disque.key "$password"
-  --copy-host-keys --build-on local)
+  --copy-host-keys)
 [ -n "$key" ] && args+=(-i "$key")
 [ -n "$known" ] && args+=(--ssh-option "UserKnownHostsFile=$known" --ssh-option StrictHostKeyChecking=accept-new)
 nix run --inputs-from . github:nix-community/nixos-anywhere -- "${args[@]}" </dev/null
