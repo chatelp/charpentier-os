@@ -247,13 +247,19 @@ cmd_check() {
   fi
 
   # The development variant (D-42): the latest wins. A version published
-  # before the newest system here (an update by update-x250.sh, say) is older
-  # than it, and is not taken; one published after it is.
+  # before the newest system here is older than it, and is not taken; one
+  # published after it is. That system's date: its publication's, when it
+  # came from the pointer (a version published while the previous one was
+  # downloading stays newer than it); else its own making's (an update by
+  # update-x250.sh, say, even before the restart).
   if [ "$channel" = dev ]; then
-    local newest made at=0
+    local newest made at=0 from
     newest=$(gens | tail -1)
     if [ -n "$newest" ]; then
-      made=$(stat -c %Y "$profiles/system-$newest-link")
+      from=$(jq -r --arg g "$newest" '.[$g].publishedAt // empty' "$db")
+      if [ -n "$from" ] && made=$(date -d "$from" +%s 2>/dev/null); then :; else
+        made=$(stat -c %Y "$profiles/system-$newest-link")
+      fi
       [ -n "$published" ] && at=$(date -d "$published" +%s 2>/dev/null || echo 0)
       if [ "$at" -le "$made" ]; then
         log "mise à jour $version publiée avant la génération $newest : rien n'est pris"

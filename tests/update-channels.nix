@@ -25,6 +25,7 @@ let
   writing = standIn "x250-essai-ecriture" null;
   dev = standIn "x250-essai-dev" "developpement";
   dev2 = standIn "x250-essai-dev-2" "developpement";
+  dev3 = standIn "x250-essai-dev-3" "developpement";
   update = import ../hosts/x250/update/package.nix {
     inherit pkgs;
     inherit (pkgs) nix;
@@ -49,6 +50,7 @@ pkgs.testers.runNixOSTest {
           writing
           dev
           dev2
+          dev3
         ];
         nix.settings.experimental-features = [ "nix-command" ];
         networking.firewall.allowedTCPPorts = [ 80 ];
@@ -64,7 +66,7 @@ pkgs.testers.runNixOSTest {
   testScript = ''
     import json
 
-    writing, dev_system, dev_system_2 = "${writing}", "${dev}", "${dev2}"
+    writing, dev_system, dev_system_2, dev_system_3 = "${writing}", "${dev}", "${dev2}", "${dev3}"
 
     def point(channel, version, path, published="2026-11-18T12:00:00Z"):
         body = json.dumps({"version": version, "notes": "- essai", "systems": {"azerty": path},
@@ -84,7 +86,7 @@ pkgs.testers.runNixOSTest {
     server.wait_for_open_port(80)
     server.succeed(
         "nix-store --generate-binary-cache-key essai-1 /srv/key.sec /srv/key.pub",
-        f"nix copy --to 'file:///srv/cache?secret-key=/srv/key.sec' {writing} {dev_system} {dev_system_2}",
+        f"nix copy --to 'file:///srv/cache?secret-key=/srv/key.sec' {writing} {dev_system} {dev_system_2} {dev_system_3}",
     )
     key = server.succeed("cat /srv/key.pub").strip()
     for m in (ecriture, dev):
@@ -118,7 +120,7 @@ pkgs.testers.runNixOSTest {
 
     with subtest("each takes its own channel's version, and never reads the other's"):
         point("latest", "0.2.0", writing)
-        point("dev", "0.2.0-dev.3", dev_system)
+        point("dev", "0.2.0-dev.3", dev_system, "2000-06-01T00:00:00Z")
         state, asked = check(ecriture)
         assert asked == ["/api/updates/latest"], asked
         assert state["ready"]["version"] == "0.2.0" and state["failure"] is None, state
@@ -128,17 +130,33 @@ pkgs.testers.runNixOSTest {
         assert state["ready"]["version"] == "0.2.0-dev.3" and state["failure"] is None, state
         dev.succeed("grep -qx '${dev} boot' /tmp/switched")
 
-    with subtest("the development variant: the latest wins, a version published before its newest system is not taken"):
+    with subtest("the development variant: the latest wins"):
+        # Its newest system, 0.2.0-dev.3, came from the pointer: its date is
+        # its publication's (June 2000), not the day it was made here.
         before = dev.succeed("cat /tmp/switched")
         point("dev", "0.2.0-dev.4", dev_system_2, "2000-01-01T00:00:00Z")
         state, _ = check(dev)
         assert state["ready"]["version"] == "0.2.0-dev.3" and state["failure"] is None, state
         assert dev.succeed("cat /tmp/switched") == before
         dev.fail("nix-store --check-validity ${dev2}")
-        point("dev", "0.2.0-dev.4", dev_system_2, "2099-01-01T00:00:00Z")
+        # Published after it, though before it was made here (a publication
+        # while the previous one downloaded): newer, taken.
+        point("dev", "0.2.0-dev.4", dev_system_2, "2001-01-01T00:00:00Z")
         state, _ = check(dev)
         assert state["ready"]["version"] == "0.2.0-dev.4", state
         dev.succeed("grep -qx '${dev2} boot' /tmp/switched")
+        # An update by update-x250.sh: a newer system, not from the pointer;
+        # its date is its making's. An older publication is not taken.
+        dev.succeed("nix-env -p /nix/var/nix/profiles/system --set $(readlink -f /run/current-system)")
+        point("dev", "0.2.0-dev.5", dev_system_3, "2002-01-01T00:00:00Z")
+        state, _ = check(dev)
+        assert state["ready"] is None and state["failure"] is None, state
+        dev.fail("nix-store --check-validity ${dev3}")
+        # One published after it is.
+        point("dev", "0.2.0-dev.5", dev_system_3, "2099-01-01T00:00:00Z")
+        state, _ = check(dev)
+        assert state["ready"]["version"] == "0.2.0-dev.5", state
+        dev.succeed("grep -qx '${dev3} boot' /tmp/switched")
 
     with subtest("nothing on /dev: the development variant finds nothing, and installs nothing"):
         server.succeed("rm /srv/api/dev.json")
