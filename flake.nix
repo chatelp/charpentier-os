@@ -117,9 +117,13 @@
       };
 
       # The update service's two channels (D-42), in virtual machines.
-      checks.${system}.update-channels = import ./tests/update-channels.nix {
-        pkgs = nixpkgs.legacyPackages.${system};
-        inherit lib;
+      checks.${system} = {
+        update-channels = import ./tests/update-channels.nix {
+          pkgs = nixpkgs.legacyPackages.${system};
+          inherit lib;
+        };
+        # The development variant's sleep on battery at 10 %.
+        dev-low-battery = import ./tests/dev-low-battery.nix { pkgs = nixpkgs.legacyPackages.${system}; };
       };
 
       packages.${system} = {

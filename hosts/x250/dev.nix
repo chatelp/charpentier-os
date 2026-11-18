@@ -76,6 +76,33 @@ in
       serviceConfig.ExecStart = "${pkgs.systemd}/bin/systemd-inhibit --what=sleep:idle --who=charpentier-dev --why=ssh --mode=block ${pkgs.coreutils}/bin/sleep infinity";
     };
 
+    # Kept awake, it would empty its batteries until it dies: on battery, at
+    # 10 % or less, it goes to sleep all the same (./dev-low-battery.sh).
+    systemd.services.charpentier-dev-low-battery = {
+      description = "Version développement : veille sur batterie à 10 %";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe (
+          pkgs.writeShellApplication {
+            name = "charpentier-dev-low-battery";
+            runtimeInputs = [
+              pkgs.coreutils
+              config.systemd.package
+            ];
+            text = builtins.readFile ./dev-low-battery.sh;
+          }
+        );
+      };
+    };
+    systemd.timers.charpentier-dev-low-battery = {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "2min";
+        OnUnitActiveSec = "1min";
+        AccuracySec = "10s";
+      };
+    };
+
     # nixos-rebuild --target-host sends the system as the author.
     nix.settings.trusted-users = [ "auteur" ];
   };
