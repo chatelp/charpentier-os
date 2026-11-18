@@ -40,7 +40,7 @@ done
 grep -qE '^(ssh|ecdsa)-' hosts/x250/dev-keys.pub 2>/dev/null ||
   { echo "✗ pas de clé dans hosts/x250/dev-keys.pub : le X250 perdrait SSH" >&2; exit 1; }
 git ls-files --error-unmatch hosts/x250/dev-keys.pub >/dev/null 2>&1 ||
-  git add --intent-to-add hosts/x250/dev-keys.pub
+  git add --force --intent-to-add hosts/x250/dev-keys.pub
 
 # The token never reaches a command line.
 auth=$(mktemp)

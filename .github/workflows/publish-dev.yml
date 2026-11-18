@@ -42,7 +42,7 @@ jobs:
         run: |
           [ -n "$KEYS" ] || { echo "::error::X250_DEV_KEYS is empty: the X250 would lose SSH"; exit 1; }
           printf '%s\n' "$KEYS" >hosts/x250/dev-keys.pub
-          git add --intent-to-add hosts/x250/dev-keys.pub
+          git add --force --intent-to-add hosts/x250/dev-keys.pub
 
       - name: Onto /api/updates/dev
         env:
