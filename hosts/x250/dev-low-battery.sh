@@ -4,6 +4,12 @@
 # So, every minute: on battery, at LIMIT % or less (both batteries together,
 # by their energy), it goes to sleep, past the inhibitor that keeps it awake.
 # On mains, or without a battery (a virtual machine), nothing.
+# --ignore-inhibitors passes the variant's own inhibitor on purpose, and also
+# those the app will lay with phase 5.15 (a sync, a print, a copy to a USB
+# key, a download): at 10 % on the development variant, acceptable.
+# With 5.15 (hibernation at 3 %, a swap file and resume=), the development
+# variant keeps one low-battery rule, not two: this one hibernates instead
+# of sleeping (sleep still drains the battery), or goes, leaving the app's.
 #   POWER: the power supplies (/sys/class/power_supply); LIMIT: 10 by default;
 #   SUSPEND: the command (systemctl suspend --ignore-inhibitors).
 set -euo pipefail
