@@ -46,7 +46,9 @@
         };
       # The development variant (phase 5.10 bis, hosts/x250/dev.nix): SSH by
       # key from the home network, the app's test mode. Its keys: the build
-      # machine's, in hosts/x250/dev-keys.pub (one per line).
+      # machine's, in hosts/x250/dev-keys.pub (one per line), never committed;
+      # their comments (user@host) are left out, the system being published on
+      # the development channel (D-42).
       lib = nixpkgs.lib;
       devKeys = ./hosts/x250/dev-keys.pub;
       x250-dev =
@@ -58,7 +60,9 @@
             ./hosts/x250/disko.nix
             {
               charpentier.dev.authorizedKeys = lib.optionals (builtins.pathExists devKeys) (
-                lib.filter (l: l != "" && !lib.hasPrefix "#" l) (lib.splitString "\n" (builtins.readFile devKeys))
+                map (l: lib.concatStringsSep " " (lib.take 2 (lib.filter (w: w != "") (lib.splitString " " l)))) (
+                  lib.filter (l: l != "" && !lib.hasPrefix "#" l) (lib.splitString "\n" (builtins.readFile devKeys))
+                )
               );
             }
           ];

@@ -1,0 +1,58 @@
+# The development variant onto its own channel (D-42, phase 5.12 bis), by
+# hand only: never with the releases (publish.yml), never on a push. The same
+# script as from the Yoga L13, scripts/publish-dev.sh.
+# Its SSH keys are the repository variable X250_DEV_KEYS (public keys, one per
+# line, set by Pierre): without them, the X250 that takes it would lose SSH.
+name: publish-dev
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "Une autre app que celle du flake.lock (github:chatelp/charpentier/<commit>), sinon vide"
+        required: false
+        default: ""
+
+concurrency:
+  group: publish-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: version de développement
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift /usr/local/share/powershell
+          df -h /
+
+      - uses: DeterminateSystems/nix-installer-action@v23
+
+      - name: The development keys
+        env:
+          KEYS: ${{ vars.X250_DEV_KEYS }}
+        run: |
+          [ -n "$KEYS" ] || { echo "::error::X250_DEV_KEYS is empty: the X250 would lose SSH"; exit 1; }
+          printf '%s\n' "$KEYS" >hosts/x250/dev-keys.pub
+          git add --intent-to-add hosts/x250/dev-keys.pub
+
+      - name: Onto /api/updates/dev
+        env:
+          APP: ${{ inputs.app }}
+          NIX_SIGNING_KEY: ${{ secrets.NIX_SIGNING_KEY }}
+          CHARPENTIER_CACHE_TOKEN: ${{ secrets.CHARPENTIER_CACHE_TOKEN }}
+        run: |
+          if [ -n "$APP" ] && ! [[ "$APP" =~ ^github:chatelp/charpentier/[0-9a-f]{7,40}$ ]]; then
+            echo "::error::app « $APP »: github:chatelp/charpentier/<commit> expected"; exit 1
+          fi
+          umask 077
+          printf '%s' "$NIX_SIGNING_KEY" >"$RUNNER_TEMP/signing-key"
+          NIX_SIGNING_KEY_FILE=$RUNNER_TEMP/signing-key scripts/publish-dev.sh ${APP:+--app "$APP"}
