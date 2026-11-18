@@ -106,6 +106,12 @@
         x250-dev-qwerty = x250-dev "qwerty";
       };
 
+      # The update service's two channels (D-42), in virtual machines.
+      checks.${system}.update-channels = import ./tests/update-channels.nix {
+        pkgs = nixpkgs.legacyPackages.${system};
+        inherit lib;
+      };
+
       packages.${system} = {
         charpentier = app;
         # The install key's image (phase 5.9 bis), written by scripts/flash-installer.sh.

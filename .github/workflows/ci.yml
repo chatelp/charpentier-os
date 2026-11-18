@@ -48,6 +48,11 @@ jobs:
       - name: The key, from end to end
         run: nix run .#test-installer
 
+      # D-42: a writing system never takes the development channel, nor the
+      # development variant the releases.
+      - name: The update channels
+        run: nix build --no-link --print-build-logs .#checks.x86_64-linux.update-channels
+
       - name: Screens
         if: always()
         uses: actions/upload-artifact@v7
