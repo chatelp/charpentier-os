@@ -81,6 +81,28 @@ in
     };
   };
 
+  # The store, cleaned every day: the generations no one needs any more go
+  # (./update.sh clean), the one running and the previous one stay.
+  systemd.services.charpentier-update-clean = {
+    description = "Charpentier : les anciennes versions retirées du disque";
+    after = [ "charpentier-update-state.service" ];
+    environment = env;
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${lib.getExe update} clean";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+    };
+  };
+  systemd.timers.charpentier-update-clean = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "20min";
+      OnUnitActiveSec = "1d";
+      RandomizedDelaySec = "10min";
+    };
+  };
+
   systemd.services."charpentier-update-boot@" = {
     description = "Charpentier : démarrer la prochaine fois sur la génération %i";
     after = [ "charpentier-update-state.service" ];

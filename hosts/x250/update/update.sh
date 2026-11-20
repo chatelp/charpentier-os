@@ -5,6 +5,7 @@
 #   update.sh state       at every start: the generation that started, its file
 #   update.sh check       the hourly check (and « Vérifier maintenant »)
 #   update.sh boot <gen>  the next start on <gen>: previous, or set aside
+#   update.sh clean       every day: the generations no one needs, and the store
 # It never restarts the X250, and never speaks to the author: it writes
 # /run/charpentier/update.json, which the app reads.
 # Two channels (D-42, phase 5.12 bis), one per variant, never crossed: the
@@ -304,6 +305,16 @@ cmd_check() {
   finish
 }
 
+# The disk's screen says « mise à jour X.Y.Z » on a generation's first start
+# only: a line its start menu's entry carries until then (every
+# switch-to-configuration writes the entries again, without it).
+mark_maj() { # gen version
+  local entry=/boot/loader/entries/nixos-generation-$1.conf
+  if [ -f "$entry" ] && ! grep -q 'charpentier\.maj=' "$entry"; then
+    sed -i "s/^options .*/& charpentier.maj=$2/" "$entry"
+  fi
+}
+
 # <gen> becomes the next start's, announced as ready.
 install_gen() { # gen version notes publishedAt
   local gen=$1
@@ -311,11 +322,7 @@ install_gen() { # gen version notes publishedAt
   "$(path_of "$gen")/bin/switch-to-configuration" boot
   jq_in "$db" --arg g "$gen" --arg v "$2" --argjson n "$3" --arg p "$4" --arg t "$(now)" \
     '.[$g] = ((.[$g] // {}) + {version: $v, notes: $n, publishedAt: (if $p == "" then null else $p end), receivedAt: $t})'
-  # The disk's screen says « mise à jour X.Y.Z » on its first start only.
-  local entry=/boot/loader/entries/nixos-generation-$gen.conf
-  if [ -f "$entry" ] && ! grep -q 'charpentier\.maj=' "$entry"; then
-    sed -i "s/^options .*/& charpentier.maj=$2/" "$entry"
-  fi
+  mark_maj "$gen" "$2"
   # A newer version than the one set aside: that one is not offered any more.
   jq_in "$saved" --argjson g "$gen" '.ready = $g | .failure = null | .setAside = null'
   log "mise à jour $2 prête : génération $gen au prochain démarrage"
@@ -345,6 +352,35 @@ cmd_boot() {
   log "prochain démarrage : génération $gen"
 }
 
+# ─── The store, cleaned (the outside review of 18 November 2026) ───
+# Every update leaves a generation behind, and the store never shrank. Kept:
+# the generation that runs and the previous one (the way back), the one ready
+# and the one set aside (the app offers them), the next start's, and the
+# newest (the development variant dates the latest by it). The others go,
+# from the profile, the start menu and the registry; then the store loses
+# what no generation needs any more.
+cmd_clean() {
+  local inst ready keep g gone=()
+  inst=$(installed_gen)
+  ready=$(saved_gen ready)
+  keep=" $inst $(previous_gen "${inst:-0}") $ready $(saved_gen setAside) $(default_gen) $(gens | tail -1) "
+  for g in $(gens); do
+    [[ $keep == *" $g "* ]] || gone+=("$g")
+  done
+  if [ ${#gone[@]} -gt 0 ]; then
+    nix-env -p "$profiles/system" --delete-generations "${gone[@]}"
+    for g in "${gone[@]}"; do
+      jq_in "$db" --arg g "$g" 'del(.[$g])'
+    done
+    # The start menu without them; the next start's stays the same.
+    "$(path_of "$(default_gen)")/bin/switch-to-configuration" boot
+    [ -n "$ready" ] && mark_maj "$ready" "$(version_of "$ready")"
+    log "générations retirées : ${gone[*]}"
+  fi
+  nix-store --gc 2>&1 | tail -1 >&2
+  write_state
+}
+
 init
 exec 9>"$run/update.lock"
 flock 9
@@ -352,5 +388,6 @@ case "${1:-}" in
   state) cmd_state ;;
   check) cmd_check ;;
   boot) cmd_boot "${2:-}" ;;
-  *) sed -n '2,9p' "$0" >&2 && exit 2 ;;
+  clean) cmd_clean ;;
+  *) sed -n '2,10p' "$0" >&2 && exit 2 ;;
 esac
