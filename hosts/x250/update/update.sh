@@ -5,8 +5,10 @@
 #   update.sh state       at every start: the generation that started, its file
 #   update.sh check       the hourly check (and « Vérifier maintenant »)
 #   update.sh boot <gen>  the next start on <gen>: previous, or set aside
+#   update.sh watch       at every start: a first start whose app never comes up
 #   update.sh clean       every day: the generations no one needs, and the store
-# It never restarts the X250, and never speaks to the author: it writes
+# It never restarts the X250 (but for a first start whose screen stays
+# black), and never speaks to the author: it writes
 # /run/charpentier/update.json, which the app reads.
 # Two channels (D-42, phase 5.12 bis), one per variant, never crossed: the
 # writing system reads /api/updates/latest (X.Y.Z, X.Y.Z-N) and takes writing
@@ -163,8 +165,10 @@ cmd_state() {
   local inst
   inst=$(installed_gen)
   if [ -n "$inst" ]; then
+    # Its first start: watched until the app comes up (cmd_watch).
     jq_in "$db" --arg g "$inst" --arg t "$(now)" --arg v "$(version_of "$inst")" \
-      '.[$g] = ({version: $v, notes: []} + (.[$g] // {})) | .[$g].installedAt //= $t'
+      '.[$g] = ({version: $v, notes: []} + (.[$g] // {}))
+       | if .[$g].installedAt == null then .[$g].installedAt = $t | .[$g].watch = true else . end'
     sed -i 's/ charpentier\.maj=[^ ]*//' "/boot/loader/entries/nixos-generation-$inst.conf" 2>/dev/null || true
     [ "$(saved_gen ready)" = "$inst" ] && jq_in "$saved" '.ready = null'
     [ "$(saved_gen setAside)" = "$inst" ] && jq_in "$saved" '.setAside = null'
@@ -352,6 +356,58 @@ cmd_boot() {
   log "prochain démarrage : génération $gen"
 }
 
+# ─── A first start whose screen stays black (the outside review of 18 November 2026) ───
+# A generation's first start is watched: the app must come up, and stay up,
+# within a few minutes. If it never does (Sway does not start, the app dies
+# again and again), the X250 goes back to the previous generation by the
+# app's own gesture (cmd_boot: the new one set aside, offered again, never
+# taken again by itself) and starts again, the failure said in the file:
+# the one time the service restarts the X250, a black screen having nothing
+# to lose. Watched once only: a generation that came up, or was sent back,
+# never is again; one stopped before the verdict (the author holding the
+# power key) is, at its next start. The time counts in rounds, which a sleep
+# does not move.
+watch_wait=${CHARPENTIER_WATCH_WAIT:-300}    # seconds, at most, for the app to be up
+watch_steady=${CHARPENTIER_WATCH_STEADY:-30} # seconds it must have run: not a loop of restarts
+app_up() {
+  local pid age
+  pid=$(pgrep -u auteur -o -f -- ' --appliance' || true)
+  [ -n "$pid" ] || return 1
+  age=$(ps -o etimes= -p "$pid" 2>/dev/null | tr -d ' ' || true)
+  [ "${age:-0}" -ge "$watch_steady" ]
+}
+
+cmd_watch() {
+  local inst prev aside i
+  inst=$(installed_gen)
+  [ -n "$inst" ] || return 0
+  [ "$(jq -r --arg g "$inst" '.[$g].watch // false' "$db")" = true ] || return 0
+  # The wait, without the lock: the hourly check is not held back by it.
+  flock -u 9
+  for ((i = 0; i < watch_wait; i += 5)); do
+    app_up && break
+    sleep 5
+  done
+  flock 9
+  jq_in "$db" --arg g "$inst" 'del(.[$g].watch)'
+  if app_up; then
+    log "génération $inst : l'app a démarré"
+    return
+  fi
+  aside=$(saved_gen setAside)
+  prev=$(previous_gen "$inst")
+  [ "$prev" = "$aside" ] && prev=
+  if [ -z "$prev" ]; then
+    log "génération $inst : l'app n'a pas démarré, et aucune génération avant elle"
+    return
+  fi
+  log "génération $inst : l'app n'a pas démarré en $watch_wait s ; retour à la génération $prev"
+  jq_in "$saved" --arg v "$(version_of "$inst")" --arg t "$(now)" '.failure = {version: $v, at: $t, reason: "start"}'
+  cmd_boot "$prev"
+  # shellcheck disable=SC2086 # the command and its words
+  ${CHARPENTIER_REBOOT:-systemctl reboot}
+}
+
 # ─── The store, cleaned (the outside review of 18 November 2026) ───
 # Every update leaves a generation behind, and the store never shrank. Kept:
 # the generation that runs and the previous one (the way back), the one ready
@@ -388,6 +444,7 @@ case "${1:-}" in
   state) cmd_state ;;
   check) cmd_check ;;
   boot) cmd_boot "${2:-}" ;;
+  watch) cmd_watch ;;
   clean) cmd_clean ;;
-  *) sed -n '2,10p' "$0" >&2 && exit 2 ;;
+  *) sed -n '2,12p' "$0" >&2 && exit 2 ;;
 esac

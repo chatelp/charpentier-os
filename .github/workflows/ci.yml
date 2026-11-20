@@ -53,6 +53,10 @@ jobs:
       - name: The update channels
         run: nix build --no-link --print-build-logs .#checks.x86_64-linux.update-channels
 
+      # The store cleaned, a first start whose screen stays black sent back.
+      - name: The generations
+        run: nix build --no-link --print-build-logs .#checks.x86_64-linux.update-generations
+
       - name: Screens
         if: always()
         uses: actions/upload-artifact@v7

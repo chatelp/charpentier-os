@@ -11,6 +11,7 @@ pkgs.writeShellApplication {
     gnugrep
     jq
     util-linux # flock
+    procps # pgrep, ps: the app's process, at a first start
     nix
   ];
   text = builtins.readFile ./update.sh;

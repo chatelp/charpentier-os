@@ -81,6 +81,21 @@ in
     };
   };
 
+  # A generation's first start: if the app never comes up (Sway does not
+  # start…), back to the previous one (./update.sh watch). In the
+  # background: the start is never held back by it.
+  systemd.services.charpentier-update-watch = {
+    description = "Charpentier : premier démarrage d'une version, retour à la précédente si l'écran reste noir";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "charpentier-update-state.service" ];
+    requires = [ "charpentier-update-state.service" ];
+    environment = env;
+    serviceConfig = {
+      Type = "exec";
+      ExecStart = "${lib.getExe update} watch";
+    };
+  };
+
   # The store, cleaned every day: the generations no one needs any more go
   # (./update.sh clean), the one running and the previous one stay.
   systemd.services.charpentier-update-clean = {
