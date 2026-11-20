@@ -81,6 +81,47 @@ in
     };
   };
 
+  # A generation's first start: if the app never comes up (Sway does not
+  # start…), back to the previous one (./update.sh watch). In the
+  # background: the start is never held back by it.
+  systemd.services.charpentier-update-watch = {
+    description = "Charpentier : premier démarrage d'une version, retour à la précédente si l'écran reste noir";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "charpentier-update-state.service" ];
+    requires = [ "charpentier-update-state.service" ];
+    environment = env;
+    serviceConfig = {
+      Type = "exec";
+      ExecStart = "${lib.getExe update} watch";
+    };
+  };
+
+  # The store, cleaned every day: the generations no one needs any more go
+  # (./update.sh clean), the one running and the previous one stay.
+  systemd.services.charpentier-update-clean = {
+    description = "Charpentier : les anciennes versions retirées du disque";
+    after = [ "charpentier-update-state.service" ];
+    environment = env;
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${lib.getExe update} clean";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+    };
+  };
+  # By the calendar, not from the start: a timer started by a switch (an
+  # update by update-x250.sh) whose OnBootSec had passed fired at once, in
+  # the middle of that switch (the X250, 20 November 2026). Missed while the
+  # X250 was off or asleep: at the next start, or on waking.
+  systemd.timers.charpentier-update-clean = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      Persistent = true;
+      RandomizedDelaySec = "1h";
+    };
+  };
+
   systemd.services."charpentier-update-boot@" = {
     description = "Charpentier : démarrer la prochaine fois sur la génération %i";
     after = [ "charpentier-update-state.service" ];

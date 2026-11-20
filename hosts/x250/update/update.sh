@@ -5,7 +5,10 @@
 #   update.sh state       at every start: the generation that started, its file
 #   update.sh check       the hourly check (and « Vérifier maintenant »)
 #   update.sh boot <gen>  the next start on <gen>: previous, or set aside
-# It never restarts the X250, and never speaks to the author: it writes
+#   update.sh watch       at every start: a first start whose app never comes up
+#   update.sh clean       every day: the generations no one needs, and the store
+# It never restarts the X250 (but for a first start whose screen stays
+# black), and never speaks to the author: it writes
 # /run/charpentier/update.json, which the app reads.
 # Two channels (D-42, phase 5.12 bis), one per variant, never crossed: the
 # writing system reads /api/updates/latest (X.Y.Z, X.Y.Z-N) and takes writing
@@ -162,8 +165,10 @@ cmd_state() {
   local inst
   inst=$(installed_gen)
   if [ -n "$inst" ]; then
+    # Its first start: watched until the app comes up (cmd_watch).
     jq_in "$db" --arg g "$inst" --arg t "$(now)" --arg v "$(version_of "$inst")" \
-      '.[$g] = ({version: $v, notes: []} + (.[$g] // {})) | .[$g].installedAt //= $t'
+      '.[$g] = ({version: $v, notes: []} + (.[$g] // {}))
+       | if .[$g].installedAt == null then .[$g].installedAt = $t | .[$g].watch = true else . end'
     sed -i 's/ charpentier\.maj=[^ ]*//' "/boot/loader/entries/nixos-generation-$inst.conf" 2>/dev/null || true
     [ "$(saved_gen ready)" = "$inst" ] && jq_in "$saved" '.ready = null'
     [ "$(saved_gen setAside)" = "$inst" ] && jq_in "$saved" '.setAside = null'
@@ -304,6 +309,16 @@ cmd_check() {
   finish
 }
 
+# The disk's screen says « mise à jour X.Y.Z » on a generation's first start
+# only: a line its start menu's entry carries until then (every
+# switch-to-configuration writes the entries again, without it).
+mark_maj() { # gen version
+  local entry=/boot/loader/entries/nixos-generation-$1.conf
+  if [ -f "$entry" ] && ! grep -q 'charpentier\.maj=' "$entry"; then
+    sed -i "s/^options .*/& charpentier.maj=$2/" "$entry"
+  fi
+}
+
 # <gen> becomes the next start's, announced as ready.
 install_gen() { # gen version notes publishedAt
   local gen=$1
@@ -311,11 +326,7 @@ install_gen() { # gen version notes publishedAt
   "$(path_of "$gen")/bin/switch-to-configuration" boot
   jq_in "$db" --arg g "$gen" --arg v "$2" --argjson n "$3" --arg p "$4" --arg t "$(now)" \
     '.[$g] = ((.[$g] // {}) + {version: $v, notes: $n, publishedAt: (if $p == "" then null else $p end), receivedAt: $t})'
-  # The disk's screen says « mise à jour X.Y.Z » on its first start only.
-  local entry=/boot/loader/entries/nixos-generation-$gen.conf
-  if [ -f "$entry" ] && ! grep -q 'charpentier\.maj=' "$entry"; then
-    sed -i "s/^options .*/& charpentier.maj=$2/" "$entry"
-  fi
+  mark_maj "$gen" "$2"
   # A newer version than the one set aside: that one is not offered any more.
   jq_in "$saved" --argjson g "$gen" '.ready = $g | .failure = null | .setAside = null'
   log "mise à jour $2 prête : génération $gen au prochain démarrage"
@@ -345,6 +356,107 @@ cmd_boot() {
   log "prochain démarrage : génération $gen"
 }
 
+# ─── A first start whose screen stays black (the outside review of 18 November 2026) ───
+# A generation's first start is watched: the app must come up, and stay up,
+# within a few minutes. If it never does (Sway does not start, the app dies
+# again and again), the X250 goes back to the previous generation by the
+# app's own gesture (cmd_boot: the new one set aside, offered again, never
+# taken again by itself) and starts again, the failure said in the file:
+# the one time the service restarts the X250, a black screen having nothing
+# to lose. Watched once only: a generation that came up, or was sent back,
+# never is again; one stopped before the verdict (the author holding the
+# power key) is, at its next start. The time counts in rounds, which a sleep
+# does not move.
+watch_wait=${CHARPENTIER_WATCH_WAIT:-300}    # seconds, at most, for the app to be up
+watch_steady=${CHARPENTIER_WATCH_STEADY:-30} # seconds it must have run: not a loop of restarts
+app_up() {
+  local pid age
+  pid=$(pgrep -u auteur -o -f -- ' --appliance' || true)
+  [ -n "$pid" ] || return 1
+  age=$(ps -o etimes= -p "$pid" 2>/dev/null | tr -d ' ' || true)
+  [ "${age:-0}" -ge "$watch_steady" ]
+}
+
+cmd_watch() {
+  local inst prev aside i
+  inst=$(installed_gen)
+  [ -n "$inst" ] || return 0
+  [ "$(jq -r --arg g "$inst" '.[$g].watch // false' "$db")" = true ] || return 0
+  # The wait, without the lock: the hourly check is not held back by it.
+  flock -u 9
+  for ((i = 0; i < watch_wait; i += 5)); do
+    app_up && break
+    sleep 5
+  done
+  flock 9
+  jq_in "$db" --arg g "$inst" 'del(.[$g].watch)'
+  if app_up; then
+    log "génération $inst : l'app a démarré"
+    return
+  fi
+  aside=$(saved_gen setAside)
+  prev=$(previous_gen "$inst")
+  [ "$prev" = "$aside" ] && prev=
+  if [ -z "$prev" ]; then
+    log "génération $inst : l'app n'a pas démarré, et aucune génération avant elle"
+    return
+  fi
+  log "génération $inst : l'app n'a pas démarré en $watch_wait s ; retour à la génération $prev"
+  jq_in "$saved" --arg v "$(version_of "$inst")" --arg t "$(now)" '.failure = {version: $v, at: $t, reason: "start"}'
+  cmd_boot "$prev"
+  # shellcheck disable=SC2086 # the command and its words
+  ${CHARPENTIER_REBOOT:-systemctl reboot}
+}
+
+# The start menu written again, the next start's generation unchanged. A
+# switch under way (update-x250.sh, an update's activation) holds its lock:
+# tried again every 10 s, 10 minutes at most; on a failure, the script stops
+# there, before the store is touched (set -e).
+write_menu() {
+  local i
+  for ((i = 0; i < 60; i++)); do
+    "$(path_of "$(default_gen)")/bin/switch-to-configuration" boot 2>"$run/menu.err" && return 0
+    if ! grep -q 'Could not acquire lock' "$run/menu.err"; then
+      cat "$run/menu.err" >&2
+      return 1
+    fi
+    sleep 10
+  done
+  log "menu de démarrage : une mise à jour en cours depuis 10 minutes, rien n'est nettoyé"
+  return 1
+}
+
+# ─── The store, cleaned (the outside review of 18 November 2026) ───
+# Every update leaves a generation behind, and the store never shrank. Kept:
+# the generation that started and the one that runs (not the same after an
+# update by update-x250.sh), the previous one (the way back), the one ready
+# and the one set aside (the app offers them), the next start's, and the
+# newest (the development variant dates the latest by it). The others go,
+# from the profile and the registry; the start menu is written again (every
+# time: the store never loses what an entry still names), then the store
+# loses what no generation needs any more.
+cmd_clean() {
+  local inst ready keep g gone=()
+  inst=$(installed_gen)
+  ready=$(saved_gen ready)
+  keep=" $inst $(gen_of "$(readlink -f /run/current-system)") $(previous_gen "${inst:-0}") $ready"
+  keep+=" $(saved_gen setAside) $(default_gen) $(gens | tail -1) "
+  for g in $(gens); do
+    [[ $keep == *" $g "* ]] || gone+=("$g")
+  done
+  if [ ${#gone[@]} -gt 0 ]; then
+    nix-env -p "$profiles/system" --delete-generations "${gone[@]}"
+    for g in "${gone[@]}"; do
+      jq_in "$db" --arg g "$g" 'del(.[$g])'
+    done
+    log "générations retirées : ${gone[*]}"
+  fi
+  write_menu
+  [ -n "$ready" ] && mark_maj "$ready" "$(version_of "$ready")"
+  nix-store --gc 2>&1 | tail -1 >&2
+  write_state
+}
+
 init
 exec 9>"$run/update.lock"
 flock 9
@@ -352,5 +464,7 @@ case "${1:-}" in
   state) cmd_state ;;
   check) cmd_check ;;
   boot) cmd_boot "${2:-}" ;;
-  *) sed -n '2,9p' "$0" >&2 && exit 2 ;;
+  watch) cmd_watch ;;
+  clean) cmd_clean ;;
+  *) sed -n '2,12p' "$0" >&2 && exit 2 ;;
 esac

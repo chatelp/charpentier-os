@@ -122,6 +122,11 @@
           pkgs = nixpkgs.legacyPackages.${system};
           inherit lib;
         };
+        # The generations: the store cleaned, a black first start sent back.
+        update-generations = import ./tests/update-generations.nix {
+          pkgs = nixpkgs.legacyPackages.${system};
+          inherit lib;
+        };
         # The development variant's sleep on battery at 10 %.
         dev-low-battery = import ./tests/dev-low-battery.nix { pkgs = nixpkgs.legacyPackages.${system}; };
       };
