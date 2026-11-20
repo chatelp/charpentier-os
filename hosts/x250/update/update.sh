@@ -408,18 +408,39 @@ cmd_watch() {
   ${CHARPENTIER_REBOOT:-systemctl reboot}
 }
 
+# The start menu written again, the next start's generation unchanged. A
+# switch under way (update-x250.sh, an update's activation) holds its lock:
+# tried again every 10 s, 10 minutes at most; on a failure, the script stops
+# there, before the store is touched (set -e).
+write_menu() {
+  local i
+  for ((i = 0; i < 60; i++)); do
+    "$(path_of "$(default_gen)")/bin/switch-to-configuration" boot 2>"$run/menu.err" && return 0
+    if ! grep -q 'Could not acquire lock' "$run/menu.err"; then
+      cat "$run/menu.err" >&2
+      return 1
+    fi
+    sleep 10
+  done
+  log "menu de démarrage : une mise à jour en cours depuis 10 minutes, rien n'est nettoyé"
+  return 1
+}
+
 # ─── The store, cleaned (the outside review of 18 November 2026) ───
 # Every update leaves a generation behind, and the store never shrank. Kept:
-# the generation that runs and the previous one (the way back), the one ready
+# the generation that started and the one that runs (not the same after an
+# update by update-x250.sh), the previous one (the way back), the one ready
 # and the one set aside (the app offers them), the next start's, and the
 # newest (the development variant dates the latest by it). The others go,
-# from the profile, the start menu and the registry; then the store loses
-# what no generation needs any more.
+# from the profile and the registry; the start menu is written again (every
+# time: the store never loses what an entry still names), then the store
+# loses what no generation needs any more.
 cmd_clean() {
   local inst ready keep g gone=()
   inst=$(installed_gen)
   ready=$(saved_gen ready)
-  keep=" $inst $(previous_gen "${inst:-0}") $ready $(saved_gen setAside) $(default_gen) $(gens | tail -1) "
+  keep=" $inst $(gen_of "$(readlink -f /run/current-system)") $(previous_gen "${inst:-0}") $ready"
+  keep+=" $(saved_gen setAside) $(default_gen) $(gens | tail -1) "
   for g in $(gens); do
     [[ $keep == *" $g "* ]] || gone+=("$g")
   done
@@ -428,11 +449,10 @@ cmd_clean() {
     for g in "${gone[@]}"; do
       jq_in "$db" --arg g "$g" 'del(.[$g])'
     done
-    # The start menu without them; the next start's stays the same.
-    "$(path_of "$(default_gen)")/bin/switch-to-configuration" boot
-    [ -n "$ready" ] && mark_maj "$ready" "$(version_of "$ready")"
     log "générations retirées : ${gone[*]}"
   fi
+  write_menu
+  [ -n "$ready" ] && mark_maj "$ready" "$(version_of "$ready")"
   nix-store --gc 2>&1 | tail -1 >&2
   write_state
 }

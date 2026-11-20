@@ -109,12 +109,16 @@ in
       IOSchedulingClass = "idle";
     };
   };
+  # By the calendar, not from the start: a timer started by a switch (an
+  # update by update-x250.sh) whose OnBootSec had passed fired at once, in
+  # the middle of that switch (the X250, 20 November 2026). Missed while the
+  # X250 was off or asleep: at the next start, or on waking.
   systemd.timers.charpentier-update-clean = {
     wantedBy = [ "timers.target" ];
     timerConfig = {
-      OnBootSec = "20min";
-      OnUnitActiveSec = "1d";
-      RandomizedDelaySec = "10min";
+      OnCalendar = "daily";
+      Persistent = true;
+      RandomizedDelaySec = "1h";
     };
   };
 

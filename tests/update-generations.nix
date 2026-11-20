@@ -14,8 +14,10 @@ let
     name:
     pkgs.runCommand "nixos-system-${name}" { } ''
       mkdir -p $out/bin
+      # /tmp/busy: another switch holds the lock, as switch-to-configuration says.
       cat >$out/bin/switch-to-configuration <<EOF
       #!${pkgs.runtimeShell}
+      [ -e /tmp/busy ] && { echo "Could not acquire lock" >&2; exit 11; }
       echo "$out \$1" >>/tmp/switched
       EOF
       chmod +x $out/bin/switch-to-configuration
@@ -113,7 +115,11 @@ pkgs.testers.runNixOSTest {
         edit("/var/lib/charpentier/update/state.json", ".ready = 6")
         x250.succeed("mkdir -p /boot/loader/entries",
                      "echo 'options init=/essai' >/boot/loader/entries/nixos-generation-6.conf")
+        # A switch under way holds the lock for 15 s: the menu waits for it,
+        # and nothing leaves the store before the menu is written.
+        x250.succeed("touch /tmp/busy", "(sleep 15; rm /tmp/busy) >/dev/null 2>&1 &")
         run("clean")
+        x250.fail("test -e /tmp/busy")
         assert gens() == [3, 4, 6], gens()
         for path in old:
             x250.fail(f"nix-store --check-validity {path}")
