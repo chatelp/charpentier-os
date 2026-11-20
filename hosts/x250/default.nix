@@ -268,6 +268,11 @@ in
 
     # The batteries and the lid: TLP, sleep when the lid closes.
     services.tlp.enable = true;
+    # On battery, TLP let the disk's controller sleep after 15 s idle: the
+    # disk stopped and started again every 30 s or so (331 times on the
+    # X250's journal, 18 November 2026; the outside review). Kept awake, as on
+    # mains: the SATA link's own saving (SATA_LINKPWR_ON_BAT) stays.
+    services.tlp.settings.AHCI_RUNTIME_PM_ON_BAT = "on";
     services.power-profiles-daemon.enable = false;
     services.logind.settings.Login = {
       HandleLidSwitch = "suspend";
